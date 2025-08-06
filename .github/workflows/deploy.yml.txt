@@ -1,0 +1,174 @@
+name: Deploy to Firebase Functions
+
+on:
+  push:
+    branches: 
+      - main
+      - master
+  pull_request:
+    branches: 
+      - main
+      - master
+
+jobs:
+  # テスト・ビルドジョブ
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: functions/package-lock.json
+
+    - name: Install dependencies
+      working-directory: ./functions
+      run: npm ci
+
+    - name: Run linter (if available)
+      working-directory: ./functions  
+      run: npm run lint --if-present
+
+    - name: Run tests (if available)
+      working-directory: ./functions
+      run: npm test --if-present
+
+    - name: Build check
+      working-directory: ./functions
+      run: npm run build --if-present
+
+  # Firebase デプロイジョブ
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: functions/package-lock.json
+
+    - name: Install dependencies
+      working-directory: ./functions
+      run: npm ci
+
+    - name: Setup Firebase CLI
+      run: |
+        npm install -g firebase-tools
+        echo "Firebase CLI version:"
+        firebase --version
+
+    - name: Create Firebase service account file
+      env:
+        FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+      run: |
+        echo "$FIREBASE_SERVICE_ACCOUNT" > ${{ github.workspace }}/service-account-key.json
+
+    - name: Authenticate with Firebase
+      env:
+        GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/service-account-key.json
+      run: |
+        firebase projects:list
+
+    - name: Deploy to Firebase Functions
+      env:
+        GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/service-account-key.json
+      run: |
+        echo "🚀 Starting Firebase deployment..."
+        firebase use blog-automation-system --token ${{ secrets.FIREBASE_TOKEN }}
+        firebase deploy --only functions --project blog-automation-system
+        echo "✅ Deployment completed!"
+
+    - name: Test deployed functions
+      run: |
+        echo "🧪 Testing deployed functions..."
+        
+        # ヘルスチェックエンドポイントをテスト
+        curl -f "https://asia-northeast1-blog-automation-system.cloudfunctions.net/healthCheck" || echo "❌ Health check failed"
+        
+        # テンプレート取得エンドポイントをテスト  
+        curl -f "https://asia-northeast1-blog-automation-system.cloudfunctions.net/getTemplates" || echo "❌ Templates endpoint failed"
+        
+        echo "✅ Function tests completed"
+
+    - name: Clean up service account file
+      if: always()
+      run: |
+        rm -f ${{ github.workspace }}/service-account-key.json
+
+    - name: Deployment notification
+      if: success()
+      run: |
+        echo "🎉 Firebase Functions deployment successful!"
+        echo "Available endpoints:"
+        echo "- Health Check: https://asia-northeast1-blog-automation-system.cloudfunctions.net/healthCheck"
+        echo "- Create Article: https://asia-northeast1-blog-automation-system.cloudfunctions.net/createArticle"
+        echo "- Create Adult Article: https://asia-northeast1-blog-automation-system.cloudfunctions.net/createAdultArticle"  
+        echo "- Get Templates: https://asia-northeast1-blog-automation-system.cloudfunctions.net/getTemplates"
+        echo "- Batch Create: https://asia-northeast1-blog-automation-system.cloudfunctions.net/batchCreateArticles"
+
+    - name: Failure notification
+      if: failure()
+      run: |
+        echo "❌ Deployment failed!"
+        echo "Please check the logs above for error details."
+        echo "Common issues:"
+        echo "1. Check Firebase service account permissions"
+        echo "2. Verify environment variables are set"
+        echo "3. Ensure Firebase project ID is correct"
+
+  # セキュリティスキャン（オプション）
+  security:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install dependencies
+      working-directory: ./functions
+      run: npm ci
+
+    - name: Run security audit
+      working-directory: ./functions
+      run: npm audit --audit-level=moderate
+
+    - name: Check for secrets in code
+      run: |
+        echo "🔍 Checking for potential secrets in code..."
+        
+        # APIキーの漏洩チェック
+        if grep -r "sk-" functions/ --exclude-dir=node_modules; then
+          echo "❌ Potential OpenAI API key found in code!"
+          exit 1
+        fi
+        
+        # パスワードの漏洩チェック  
+        if grep -r -i "password.*=" functions/ --exclude-dir=node_modules | grep -v "functions.config()"; then
+          echo "❌ Potential password found in code!"
+          exit 1
+        fi
+        
+        echo "✅ No obvious secrets found in code"
+
+# ワークフロー設定
+env:
+  NODE_ENV: production
+  FUNCTIONS_REGION: asia-northeast1
