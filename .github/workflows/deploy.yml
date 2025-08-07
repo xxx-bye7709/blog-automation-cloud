@@ -33,7 +33,7 @@ jobs:
         firebase --version
         
     - name: Deploy to Firebase Functions
-      run: firebase deploy --only functions --project ${{ env.PROJECT_ID }}
+      run: firebase deploy --only functions --force --project ${{ env.PROJECT_ID }}
       env:
         FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
         
