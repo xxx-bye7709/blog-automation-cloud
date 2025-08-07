@@ -522,6 +522,266 @@ class CloudBlogTool {
       }
     };
   }
+  // functions/lib/blog-tool.jsのクラス内に以下のメソッドを追加してください
+
+    /**
+     * WordPress接続テスト
+     * @returns {Object} 接続テスト結果
+     */
+    async testWordPressConnection() {
+        try {
+            const wpUrl = process.env.WP_URL;
+            const wpUsername = process.env.WP_USERNAME;
+            const wpPassword = process.env.WP_PASSWORD;
+            
+            if (!wpUrl || !wpUsername || !wpPassword) {
+                throw new Error('WordPress環境変数が設定されていません (WP_URL, WP_USERNAME, WP_PASSWORD)');
+            }
+            
+            console.log('🔗 WordPress接続テスト開始:', wpUrl);
+            
+            // WordPress REST API エンドポイントをテスト
+            const response = await fetch(`${wpUrl}/wp-json/wp/v2/users/me`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Basic ${Buffer.from(`${wpUsername}:${wpPassword}`).toString('base64')}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`WordPress認証失敗 (${response.status}): ${errorText}`);
+            }
+            
+            const userData = await response.json();
+            
+            // サイト情報も取得
+            const siteResponse = await fetch(`${wpUrl}/wp-json/wp/v2/`, {
+                method: 'GET'
+            });
+            
+            let siteInfo = {};
+            if (siteResponse.ok) {
+                siteInfo = await siteResponse.json();
+            }
+            
+            console.log('✅ WordPress接続成功:', userData.name);
+            
+            return {
+                success: true,
+                siteUrl: wpUrl,
+                version: siteInfo.namespaces?.includes('wp/v2') ? 'REST API v2対応' : '不明',
+                user: userData.name,
+                userRoles: userData.roles,
+                message: 'WordPress接続正常'
+            };
+            
+        } catch (error) {
+            console.error('❌ WordPress接続エラー:', error);
+            return {
+                success: false,
+                siteUrl: process.env.WP_URL || '未設定',
+                version: '不明',
+                user: '認証失敗',
+                message: error.message
+            };
+        }
+    }
+    
+    /**
+     * 記事をWordPressに投稿
+     * @param {Object} article - 投稿する記事データ
+     * @returns {Object} 投稿結果
+     */
+    async publishToWordPress(article) {
+        try {
+            const wpUrl = process.env.WP_URL;
+            const wpUsername = process.env.WP_USERNAME;
+            const wpPassword = process.env.WP_PASSWORD;
+            
+            if (!wpUrl || !wpUsername || !wpPassword) {
+                throw new Error('WordPress環境変数が設定されていません');
+            }
+            
+            if (!article || !article.title || !article.content) {
+                throw new Error('記事データが不正です（titleまたはcontentが不足）');
+            }
+            
+            console.log('📤 WordPress投稿開始:', article.title);
+            
+            // マークダウンからHTMLに簡易変換
+            const htmlContent = this.convertMarkdownToHtml(article.content);
+            
+            // WordPressの投稿データ準備
+            const postData = {
+                title: article.title,
+                content: htmlContent,
+                status: 'draft', // 下書きとして投稿（安全性のため）
+                author: 1, // 管理者ユーザー
+                excerpt: this.generateExcerpt(article.content),
+                tags: article.keywords ? article.keywords.split(',').map(k => k.trim()) : [],
+                categories: [1], // デフォルトカテゴリ
+                meta: {
+                    generated_by: 'Firebase Functions Blog Automation',
+                    template_used: article.template || 'unknown',
+                    word_count: article.wordCount || 0,
+                    generated_at: new Date().toISOString()
+                }
+            };
+            
+            // WordPress REST API 投稿実行
+            const response = await fetch(`${wpUrl}/wp-json/wp/v2/posts`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Basic ${Buffer.from(`${wpUsername}:${wpPassword}`).toString('base64')}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(postData)
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(`WordPress投稿エラー (${response.status}): ${errorData.message || 'Unknown error'}`);
+            }
+            
+            const postResult = await response.json();
+            
+            console.log('✅ WordPress投稿成功:', postResult.id);
+            
+            return {
+                published: true,
+                id: postResult.id,
+                title: postResult.title.rendered,
+                link: postResult.link,
+                status: postResult.status,
+                date: postResult.date,
+                modified: postResult.modified,
+                excerpt: postResult.excerpt.rendered,
+                author: postResult.author,
+                categories: postResult.categories,
+                tags: postResult.tags
+            };
+            
+        } catch (error) {
+            console.error('❌ WordPress投稿エラー:', error);
+            throw new Error(`WordPress投稿失敗: ${error.message}`);
+        }
+    }
+    
+    /**
+     * マークダウンからHTMLへの簡易変換
+     * @param {string} markdown - マークダウンテキスト
+     * @returns {string} HTML変換されたテキスト
+     */
+    convertMarkdownToHtml(markdown) {
+        if (!markdown) return '';
+        
+        let html = markdown;
+        
+        // 見出しの変換
+        html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+        html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+        html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+        html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
+        
+        // 太字・斜体
+        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        
+        // リンク
+        html = html.replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2">$1</a>');
+        
+        // 改行をHTMLの改行に変換
+        html = html.replace(/\n\n/g, '</p><p>');
+        html = html.replace(/\n/g, '<br>');
+        
+        // 段落タグで囲む
+        html = '<p>' + html + '</p>';
+        
+        // 連続するpタグをクリーンアップ
+        html = html.replace(/<p><\/p>/g, '');
+        html = html.replace(/<p><p>/g, '<p>');
+        html = html.replace(/<\/p><\/p>/g, '</p>');
+        
+        return html;
+    }
+    
+    /**
+     * 記事の抜粋を生成
+     * @param {string} content - 記事本文
+     * @returns {string} 抜粋テキスト
+     */
+    generateExcerpt(content) {
+        if (!content) return '';
+        
+        // マークダウン記法を除去
+        let plainText = content.replace(/#+\s/g, ''); // 見出し記号削除
+        plainText = plainText.replace(/\*\*(.+?)\*\*/g, '$1'); // 太字記号削除
+        plainText = plainText.replace(/\*(.+?)\*/g, '$1'); // 斜体記号削除
+        plainText = plainText.replace(/\[(.+?)\]\(.+?\)/g, '$1'); // リンク記号削除
+        
+        // 最初の段落を取得（改行で分割）
+        const firstParagraph = plainText.split('\n\n')[0];
+        
+        // 120文字に制限
+        if (firstParagraph.length > 120) {
+            return firstParagraph.substring(0, 120) + '...';
+        }
+        
+        return firstParagraph;
+    }
+    
+    /**
+     * WordPress投稿の更新
+     * @param {number} postId - 投稿ID
+     * @param {Object} updateData - 更新データ
+     * @returns {Object} 更新結果
+     */
+    async updateWordPressPost(postId, updateData) {
+        try {
+            const wpUrl = process.env.WP_URL;
+            const wpUsername = process.env.WP_USERNAME;
+            const wpPassword = process.env.WP_PASSWORD;
+            
+            if (!postId) {
+                throw new Error('投稿IDが指定されていません');
+            }
+            
+            console.log(`📝 WordPress投稿更新開始: ID ${postId}`);
+            
+            const response = await fetch(`${wpUrl}/wp-json/wp/v2/posts/${postId}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Basic ${Buffer.from(`${wpUsername}:${wpPassword}`).toString('base64')}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(updateData)
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(`WordPress更新エラー (${response.status}): ${errorData.message}`);
+            }
+            
+            const updateResult = await response.json();
+            
+            console.log('✅ WordPress投稿更新成功:', updateResult.id);
+            
+            return {
+                updated: true,
+                id: updateResult.id,
+                title: updateResult.title.rendered,
+                link: updateResult.link,
+                status: updateResult.status,
+                modified: updateResult.modified
+            };
+            
+        } catch (error) {
+            console.error('❌ WordPress更新エラー:', error);
+            throw new Error(`WordPress更新失敗: ${error.message}`);
+        }
+    }
 }
 
 // エクスポート
