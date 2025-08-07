@@ -224,6 +224,237 @@ exports.generateArticle = functions
     }
   });
 
+// 🚀 WordPress自動投稿機能
+exports.publishArticle = onRequest(async (request, response) => {
+    try {
+        const { templateId, keyword, theme, customPrompt, publishToWordPress = false } = request.body || request.query;
+        
+        // パラメータ検証
+        if (!templateId) {
+            return response.status(400).json({
+                success: false,
+                error: 'templateId is required'
+            });
+        }
+        
+        logger.info(`Publishing article with template: ${templateId}`, { 
+            templateId, 
+            keyword, 
+            theme,
+            publishToWordPress 
+        });
+        
+        // CloudBlogTool初期化
+        const blogTool = new CloudBlogTool();
+        
+        // 記事生成
+        const article = await blogTool.generateArticle({
+            templateId: templateId,
+            keyword: keyword || 'テストキーワード',
+            theme: theme || keyword || 'テストテーマ',
+            customPrompt: customPrompt
+        });
+        
+        let wordpressResult = null;
+        
+        // WordPress自動投稿（オプション）
+        if (publishToWordPress && publishToWordPress !== 'false') {
+            try {
+                logger.info('Starting WordPress publishing...');
+                wordpressResult = await blogTool.publishToWordPress(article);
+                logger.info('Article published to WordPress successfully', { 
+                    postId: wordpressResult.id,
+                    url: wordpressResult.link 
+                });
+            } catch (wpError) {
+                logger.error('WordPress publishing failed:', wpError);
+                // WordPressエラーでも記事生成は成功として扱う
+                wordpressResult = {
+                    error: wpError.message,
+                    published: false,
+                    details: 'WordPress投稿に失敗しましたが、記事生成は成功しています'
+                };
+            }
+        }
+        
+        response.json({
+            success: true,
+            templateId: templateId,
+            keyword: keyword,
+            theme: theme,
+            article: article,
+            wordpress: wordpressResult,
+            generatedAt: new Date().toISOString(),
+            publishedToWordPress: !!wordpressResult?.published
+        });
+        
+    } catch (error) {
+        logger.error('Error publishing article:', error);
+        response.status(500).json({
+            success: false,
+            error: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
+    }
+});
+
+// 📦 バッチ記事生成機能（複数記事の一括生成）
+exports.generateBatchArticles = onRequest(async (request, response) => {
+    try {
+        const { articles, publishToWordPress = false } = request.body;
+        
+        if (!articles || !Array.isArray(articles)) {
+            return response.status(400).json({
+                success: false,
+                error: 'articles array is required. Format: [{"templateId": "review", "keyword": "test", "theme": "test theme"}]'
+            });
+        }
+        
+        if (articles.length > 10) {
+            return response.status(400).json({
+                success: false,
+                error: 'Maximum 10 articles per batch to prevent API rate limits'
+            });
+        }
+        
+        logger.info(`Generating batch articles: ${articles.length} articles`, {
+            publishToWordPress: publishToWordPress
+        });
+        
+        const blogTool = new CloudBlogTool();
+        const results = [];
+        let successCount = 0;
+        let errorCount = 0;
+        
+        // 順次処理（並行処理はAPI制限回避のため避ける）
+        for (let i = 0; i < articles.length; i++) {
+            const articleConfig = articles[i];
+            
+            try {
+                logger.info(`Processing article ${i + 1}/${articles.length}`, articleConfig);
+                
+                // 記事生成
+                const article = await blogTool.generateArticle({
+                    templateId: articleConfig.templateId,
+                    keyword: articleConfig.keyword,
+                    theme: articleConfig.theme || articleConfig.keyword,
+                    customPrompt: articleConfig.customPrompt
+                });
+                
+                let wordpressResult = null;
+                
+                // WordPress投稿（オプション）
+                if (publishToWordPress) {
+                    try {
+                        wordpressResult = await blogTool.publishToWordPress(article);
+                        logger.info(`Article ${i + 1} published to WordPress`, { 
+                            postId: wordpressResult.id 
+                        });
+                    } catch (wpError) {
+                        logger.error(`WordPress publishing failed for article ${i + 1}:`, wpError);
+                        wordpressResult = {
+                            error: wpError.message,
+                            published: false
+                        };
+                    }
+                }
+                
+                results.push({
+                    index: i,
+                    success: true,
+                    article: article,
+                    wordpress: wordpressResult,
+                    config: articleConfig
+                });
+                
+                successCount++;
+                
+                // API制限回避のため記事生成間隔を調整
+                if (i < articles.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 3000)); // 3秒待機
+                }
+                
+            } catch (articleError) {
+                logger.error(`Error generating article ${i + 1}:`, articleError);
+                results.push({
+                    index: i,
+                    success: false,
+                    error: articleError.message,
+                    config: articleConfig
+                });
+                errorCount++;
+            }
+        }
+        
+        response.json({
+            success: true,
+            totalRequested: articles.length,
+            successCount: successCount,
+            errorCount: errorCount,
+            results: results,
+            publishToWordPress: publishToWordPress,
+            completedAt: new Date().toISOString(),
+            summary: {
+                generated: successCount,
+                failed: errorCount,
+                wordpressPublished: results.filter(r => r.wordpress?.published).length
+            }
+        });
+        
+    } catch (error) {
+        logger.error('Error in batch generation:', error);
+        response.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// 🔧 WordPress接続テスト機能
+exports.testWordPressConnection = onRequest(async (request, response) => {
+    try {
+        logger.info('Testing WordPress connection...');
+        
+        const blogTool = new CloudBlogTool();
+        
+        // WordPress接続テストを実行
+        const testResult = await blogTool.testWordPressConnection();
+        
+        response.json({
+            success: true,
+            wordpress: {
+                connected: testResult.success,
+                siteUrl: testResult.siteUrl,
+                version: testResult.version,
+                user: testResult.user,
+                message: testResult.message
+            },
+            environment: {
+                hasWpUrl: !!process.env.WP_URL,
+                hasWpUsername: !!process.env.WP_USERNAME,
+                hasWpPassword: !!process.env.WP_PASSWORD
+            },
+            timestamp: new Date().toISOString()
+        });
+        
+    } catch (error) {
+        logger.error('WordPress connection test failed:', error);
+        response.status(500).json({
+            success: false,
+            error: error.message,
+            wordpress: {
+                connected: false,
+                message: 'Connection test failed'
+            },
+            environment: {
+                hasWpUrl: !!process.env.WP_URL,
+                hasWpUsername: !!process.env.WP_USERNAME,
+                hasWpPassword: !!process.env.WP_PASSWORD
+            }
+        });
+    }
+});
+
 console.log("🚀 Firebase Functions initialized successfully");
 console.log("Available endpoints:");
 console.log("- helloWorld (GET)");
