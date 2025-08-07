@@ -1,17 +1,11 @@
 {
-  "name": "blog-automation-functions",
+  "name": "functions",
   "version": "1.0.0",
   "engines": {
     "node": "20"
   },
   "dependencies": {
-    "firebase-functions": "^5.0.0",
-    "firebase-admin": "^12.0.0",
-    "@google-cloud/logging": "^11.0.0",
-    "@google-cloud/pubsub": "^4.0.0",
-    "axios": "^1.6.0",
-    "dotenv": "^16.3.0",
-    "node-cron": "^3.0.3"
+    "firebase-functions": "^5.0.0"
   },
   "private": true
 }
