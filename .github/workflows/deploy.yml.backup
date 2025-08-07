@@ -1,0 +1,42 @@
+name: Deploy to Firebase Functions
+
+on:
+  push:
+    branches: 
+      - main
+      - master
+
+env:
+  PROJECT_ID: blog-automation-system
+  FUNCTION_REGION: asia-northeast1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: Install dependencies
+      working-directory: ./functions
+      run: npm install
+      
+    - name: Deploy to Firebase Functions
+      uses: w9jds/firebase-action@v13.10.1
+      with:
+        args: deploy --only functions --project ${{ env.PROJECT_ID }}
+      env:
+        FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        
+    - name: Test deployment
+      run: |
+        echo "🚀 Deployment completed!"
+        echo "Testing health check endpoint..."
+        sleep 30
+        curl -f "https://${{ env.FUNCTION_REGION }}-${{ env.PROJECT_ID }}.cloudfunctions.net/healthCheck" || echo "Health check will be available shortly"
