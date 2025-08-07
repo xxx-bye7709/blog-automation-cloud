@@ -785,6 +785,6 @@ class CloudBlogTool {
 }
 
 // エクスポート
-module.exports = { CloudBlogTool };
+module.exports = CloudBlogTool;
 
 console.log('🛠️ CloudBlogTool クラス定義完了');
