@@ -3,6 +3,9 @@
  * AIを活用した記事自動生成・投稿システム
  */
 
+// dotenv設定を先頭で読み込み
+require('dotenv').config();
+
 const functions = require('firebase-functions');
 const axios = require('axios');
 const { suggestTemplate, generateDetailedPrompt } = require('./templates');
@@ -10,22 +13,22 @@ const { suggestTemplate, generateDetailedPrompt } = require('./templates');
 class CloudBlogTool {
   constructor() {
     console.log('🤖 CloudBlogTool 初期化中...');
-    
-    // Firebase Functions の設定から環境変数を取得
+
+    // 環境変数から設定を取得（新方式）
     this.config = {
       openai: {
-        apiKey: functions.config().openai?.api_key,
+        apiKey: process.env.OPENAI_API_KEY,
         model: 'gpt-4o-mini', // コスト効率の良いモデル
         maxTokens: 4000
       },
       wordpress: {
-        baseUrl: functions.config().wordpress?.base_url,
-        username: functions.config().wordpress?.username,
-        password: functions.config().wordpress?.password
+        baseUrl: process.env.WORDPRESS_BASE_URL,
+        username: process.env.WORDPRESS_USERNAME,
+        password: process.env.WORDPRESS_PASSWORD
       },
       dmm: {
         apiId: '65HMBVSGX4VpAKwfHxtg', // 固定APIキー
-        affiliateId: functions.config().dmm?.affiliate_id
+        affiliateId: process.env.DMM_AFFILIATE_ID
       }
     };
 
