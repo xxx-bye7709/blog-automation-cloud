@@ -411,108 +411,112 @@ HTMLタグを使用して出力してください。
   /**
    * デフォルトテンプレート
    */
-  // blog-tool.js の以下のメソッドに adult カテゴリを追加
+  getDefaultTemplate(category) {
+    const templates = {
+      entertainment: {
+        topics: [
+          '最新の芸能ニュース',
+          '話題のドラマ・バラエティ',
+          '注目のタレント・俳優',
+          'エンタメ業界の裏話'
+        ]
+      },
+      anime: {
+        topics: [
+          '今期の注目アニメ',
+          '人気声優の最新情報',
+          'アニメ映画レビュー',
+          '原作とアニメの違い'
+        ]
+      },
+      game: {
+        topics: [
+          '新作ゲームレビュー',
+          'ゲーム攻略情報',
+          'eスポーツ最新情報',
+          'レトロゲーム特集'
+        ]
+      },
+      movie: {
+        topics: [
+          '話題の新作映画',
+          '映画館での体験',
+          '名作映画の解説',
+          '映画業界のトレンド'
+        ]
+      },
+      music: {
+        topics: [
+          '新曲リリース情報',
+          'ライブ・コンサート情報',
+          'アーティストインタビュー',
+          '音楽ストリーミング動向'
+        ]
+      },
+      tech: {
+        topics: [
+          '最新ガジェットレビュー',
+          'AI・テクノロジートレンド',
+          'プログラミング入門',
+          'デジタルライフハック'
+        ]
+      },
+      beauty: {
+        topics: [
+          'スキンケア最新情報',
+          'メイクアップトレンド',
+          '美容成分の解説',
+          'セルフケア方法'
+        ]
+      },
+      food: {
+        topics: [
+          '話題のレストラン',
+          '簡単レシピ紹介',
+          'グルメトレンド',
+          '食材の豆知識'
+        ]
+      },
+      lifestyle: {
+        topics: [
+          '大人の恋愛心理学',
+          '健康的な人間関係の築き方',
+          'パートナーとのコミュニケーション術',
+          '大人向けライフスタイル情報',
+          '現代の恋愛事情',
+          '自己啓発と人間関係'
+        ]
+      }
+    };
+    
+    return templates[category] || templates.entertainment;
+  }
 
-// blog-tool.js の getDefaultTemplate メソッドを以下に完全置き換え
+  /**
+   * デフォルトトピック
+   */
+  getDefaultTopics(category) {
+    const template = this.getDefaultTemplate(category);
+    return template.topics;
+  }
 
-getDefaultTemplate(category) {
-  const templates = {
-    entertainment: {
-      topics: [
-        '最新の芸能ニュース',
-        '話題のドラマ・バラエティ',
-        '注目のタレント・俳優',
-        'エンタメ業界の裏話'
-      ]
-    },
-    anime: {
-      topics: [
-        '今期の注目アニメ',
-        '人気声優の最新情報',
-        'アニメ映画レビュー',
-        '原作とアニメの違い'
-      ]
-    },
-    game: {
-      topics: [
-        '新作ゲームレビュー',
-        'ゲーム攻略情報',
-        'eスポーツ最新情報',
-        'レトロゲーム特集'
-      ]
-    },
-    movie: {
-      topics: [
-        '話題の新作映画',
-        '映画館での体験',
-        '名作映画の解説',
-        '映画業界のトレンド'
-      ]
-    },
-    music: {
-      topics: [
-        '新曲リリース情報',
-        'ライブ・コンサート情報',
-        'アーティストインタビュー',
-        '音楽ストリーミング動向'
-      ]
-    },
-    tech: {
-      topics: [
-        '最新ガジェットレビュー',
-        'AI・テクノロジートレンド',
-        'プログラミング入門',
-        'デジタルライフハック'
-      ]
-    },
-    beauty: {
-      topics: [
-        'スキンケア最新情報',
-        'メイクアップトレンド',
-        '美容成分の解説',
-        'セルフケア方法'
-      ]
-    },
-    food: {
-      topics: [
-        '話題のレストラン',
-        '簡単レシピ紹介',
-        'グルメトレンド',
-        '食材の豆知識'
-      ]
-    },
-    lifestyle: {
-      topics: [
-        '大人の恋愛心理学',
-        '健康的な人間関係の築き方',
-        'パートナーとのコミュニケーション術',
-        '大人向けライフスタイル情報',
-        '現代の恋愛事情',
-        '自己啓発と人間関係'
-      ]
-    }
-  };
-  
-  return templates[category] || templates.entertainment;
-}
-  
-  return templates[category] || templates.entertainment;
-}
-
-getCategoryName(category) {
-  const names = {
-    entertainment: 'エンターテインメント',
-    anime: 'アニメ',
-    game: 'ゲーム',
-    movie: '映画',
-    music: '音楽',
-    tech: 'テクノロジー',
-    beauty: '美容',
-    food: 'グルメ',
-    lifestyle: 'ライフスタイル'
-  };
-  return names[category] || 'エンターテインメント';
-}
+  /**
+   * カテゴリー名取得
+   */
+  getCategoryName(category) {
+    const names = {
+      entertainment: 'エンターテインメント',
+      anime: 'アニメ',
+      game: 'ゲーム',
+      movie: '映画',
+      music: '音楽',
+      tech: 'テクノロジー',
+      beauty: '美容',
+      food: 'グルメ',
+      lifestyle: 'ライフスタイル'
+    };
+    return names[category] || 'エンターテインメント';
+  }
 
 generateTags(category) {
   const tagSets = {
