@@ -1433,11 +1433,11 @@ exports.intelligentScheduledPost = functions
       
       // カテゴリに応じた記事生成
       let article;
-      if (category === 'lifestyle') {  // adult → lifestyle に変更
-        article = await generateMatureLifestyleArticle(blogTool, 'moderate');
-      } else {
-        article = await blogTool.generateArticle(category);
-      }
+      if (category === 'selfhelp') {  // lifestyle → selfhelp
+  article = await generateHealthyRelationshipArticle(blogTool, 'general');
+} else {
+  article = await blogTool.generateArticle(category);
+}
       
       // WordPress投稿
       const result = await blogTool.postToWordPress(article);
@@ -1488,7 +1488,7 @@ exports.weeklyBatchScheduler = functions
         { category: 'tech', count: 2 },
         { category: 'beauty', count: 1 },
         { category: 'food', count: 1 },
-        { category: 'lifestyle', count: 2 }  // adult → lifestyle に変更
+        { category: 'selfhelp', count: 2 }  // lifestyle → selfhelp
       ];
       
       const blogTool = new BlogAutomationTool();
@@ -1572,11 +1572,11 @@ exports.eventBasedScheduler = functions
             count: intensity === 'high' ? 12 : 6,
             interval: 2000
           },
-          'lifestyle-feature': {  // adult-feature → lifestyle-feature に変更
-            categories: ['lifestyle'],
-            count: intensity === 'high' ? 6 : 3,
-            interval: 6000
-          }
+          'selfhelp-feature': {  // lifestyle-feature → selfhelp-feature
+  categories: ['selfhelp'],
+  count: intensity === 'high' ? 6 : 3,
+  interval: 6000
+}
         };
         
         const config = eventConfigs[eventType];
@@ -1653,7 +1653,7 @@ exports.eventBasedScheduler = functions
 function selectCategoryByTime(hour, dayOfWeek) {
   // 深夜・早朝 (0-6時)
   if (hour >= 0 && hour < 6) {
-    return Math.random() < 0.3 ? 'lifestyle' : 'anime';  // adult → lifestyle
+    return Math.random() < 0.3 ? 'selfhelp' : 'anime';  // lifestyle → selfhelp
   }
   
   // 朝 (6-9時)
