@@ -413,7 +413,8 @@ HTMLタグを使用して出力してください。
    */
   // blog-tool.js の以下のメソッドに adult カテゴリを追加
 
-// 1. getDefaultTemplate メソッドに追加（380行目付近）
+// blog-tool.js の getDefaultTemplate メソッドを以下に完全置き換え
+
 getDefaultTemplate(category) {
   const templates = {
     entertainment: {
@@ -480,7 +481,6 @@ getDefaultTemplate(category) {
         '食材の豆知識'
       ]
     },
-    // 🌟 大人向けライフスタイルカテゴリを追加
     lifestyle: {
       topics: [
         '大人の恋愛心理学',
@@ -489,25 +489,16 @@ getDefaultTemplate(category) {
         '大人向けライフスタイル情報',
         '現代の恋愛事情',
         '自己啓発と人間関係'
-      ],
-      focus: {
-        educational: true,
-        constructive: true,
-        mature: true
-      }
-    }
-      compliance: {
-        ageRestriction: true,
-        educationalFocus: true,
-        responsibleContent: true
-      }
+      ]
     }
   };
   
   return templates[category] || templates.entertainment;
 }
+  
+  return templates[category] || templates.entertainment;
+}
 
-// 2. getCategoryName メソッドに追加（424行目付近）
 getCategoryName(category) {
   const names = {
     entertainment: 'エンターテインメント',
@@ -518,12 +509,11 @@ getCategoryName(category) {
     tech: 'テクノロジー',
     beauty: '美容',
     food: 'グルメ',
-    lifestyle: 'ライフスタイル'  // 🌟 adult → lifestyle に変更
+    lifestyle: 'ライフスタイル'
   };
   return names[category] || 'エンターテインメント';
 }
 
-// 3. generateTags メソッドに追加（437行目付近）
 generateTags(category) {
   const tagSets = {
     entertainment: ['エンタメ', '芸能', 'ニュース', '話題', '2025'],
@@ -534,8 +524,8 @@ generateTags(category) {
     tech: ['テクノロジー', 'IT', 'ガジェット', 'AI', '最新技術'],
     beauty: ['美容', 'コスメ', 'スキンケア', 'メイク', 'トレンド'],
     food: ['グルメ', 'レシピ', 'レストラン', '料理', '食べ歩き'],
-    lifestyle: ['大人向け', 'ライフスタイル', '恋愛', '人間関係', '自己啓発', '心理学']  // 🌟 健全なタグに変更
-    };
+    lifestyle: ['大人向け', 'ライフスタイル', '恋愛', '人間関係', '自己啓発', '心理学']
+  };
   return tagSets[category] || tagSets.entertainment;
 }
 
