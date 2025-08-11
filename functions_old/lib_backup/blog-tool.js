@@ -411,118 +411,127 @@ HTMLタグを使用して出力してください。
   /**
    * デフォルトテンプレート
    */
-  getDefaultTemplate(category) {
-    const templates = {
-      entertainment: {
-        topics: [
-          '最新の芸能ニュース',
-          '話題のドラマ・バラエティ',
-          '注目のタレント・俳優',
-          'エンタメ業界の裏話'
-        ]
-      },
-      anime: {
-        topics: [
-          '今期の注目アニメ',
-          '人気声優の最新情報',
-          'アニメ映画レビュー',
-          '原作とアニメの違い'
-        ]
-      },
-      game: {
-        topics: [
-          '新作ゲームレビュー',
-          'ゲーム攻略情報',
-          'eスポーツ最新情報',
-          'レトロゲーム特集'
-        ]
-      },
-      movie: {
-        topics: [
-          '話題の新作映画',
-          '映画館での体験',
-          '名作映画の解説',
-          '映画業界のトレンド'
-        ]
-      },
-      music: {
-        topics: [
-          '新曲リリース情報',
-          'ライブ・コンサート情報',
-          'アーティストインタビュー',
-          '音楽ストリーミング動向'
-        ]
-      },
-      tech: {
-        topics: [
-          '最新ガジェットレビュー',
-          'AI・テクノロジートレンド',
-          'プログラミング入門',
-          'デジタルライフハック'
-        ]
-      },
-      beauty: {
-        topics: [
-          'スキンケア最新情報',
-          'メイクアップトレンド',
-          '美容成分の解説',
-          'セルフケア方法'
-        ]
-      },
-      food: {
-        topics: [
-          '話題のレストラン',
-          '簡単レシピ紹介',
-          'グルメトレンド',
-          '食材の豆知識'
-        ]
+  // blog-tool.js の以下のメソッドに adult カテゴリを追加
+
+// 1. getDefaultTemplate メソッドに追加（380行目付近）
+getDefaultTemplate(category) {
+  const templates = {
+    entertainment: {
+      topics: [
+        '最新の芸能ニュース',
+        '話題のドラマ・バラエティ',
+        '注目のタレント・俳優',
+        'エンタメ業界の裏話'
+      ]
+    },
+    anime: {
+      topics: [
+        '今期の注目アニメ',
+        '人気声優の最新情報',
+        'アニメ映画レビュー',
+        '原作とアニメの違い'
+      ]
+    },
+    game: {
+      topics: [
+        '新作ゲームレビュー',
+        'ゲーム攻略情報',
+        'eスポーツ最新情報',
+        'レトロゲーム特集'
+      ]
+    },
+    movie: {
+      topics: [
+        '話題の新作映画',
+        '映画館での体験',
+        '名作映画の解説',
+        '映画業界のトレンド'
+      ]
+    },
+    music: {
+      topics: [
+        '新曲リリース情報',
+        'ライブ・コンサート情報',
+        'アーティストインタビュー',
+        '音楽ストリーミング動向'
+      ]
+    },
+    tech: {
+      topics: [
+        '最新ガジェットレビュー',
+        'AI・テクノロジートレンド',
+        'プログラミング入門',
+        'デジタルライフハック'
+      ]
+    },
+    beauty: {
+      topics: [
+        'スキンケア最新情報',
+        'メイクアップトレンド',
+        '美容成分の解説',
+        'セルフケア方法'
+      ]
+    },
+    food: {
+      topics: [
+        '話題のレストラン',
+        '簡単レシピ紹介',
+        'グルメトレンド',
+        '食材の豆知識'
+      ]
+    },
+    // 🔞 アダルトカテゴリを追加
+    adult: {
+      topics: [
+        '大人の恋愛心理学',
+        'セクシュアルウェルネス入門',
+        'カップルのコミュニケーション術',
+        '大人向けライフスタイル情報',
+        '健全な関係性について',
+        'アダルト業界トレンド分析'
+      ],
+      compliance: {
+        ageRestriction: true,
+        educationalFocus: true,
+        responsibleContent: true
       }
-    };
-    
-    return templates[category] || templates.entertainment;
-  }
+    }
+  };
+  
+  return templates[category] || templates.entertainment;
+}
 
-  /**
-   * デフォルトトピック
-   */
-  getDefaultTopics(category) {
-    const template = this.getDefaultTemplate(category);
-    return template.topics;
-  }
+// 2. getCategoryName メソッドに追加（424行目付近）
+getCategoryName(category) {
+  const names = {
+    entertainment: 'エンターテインメント',
+    anime: 'アニメ',
+    game: 'ゲーム',
+    movie: '映画',
+    music: '音楽',
+    tech: 'テクノロジー',
+    beauty: '美容',
+    food: 'グルメ',
+    adult: 'アダルト'  // 🔞 追加
+  };
+  return names[category] || 'エンターテインメント';
+}
 
-  /**
-   * カテゴリー名取得
-   */
-  getCategoryName(category) {
-    const names = {
-      entertainment: 'エンターテインメント',
-      anime: 'アニメ',
-      game: 'ゲーム',
-      movie: '映画',
-      music: '音楽',
-      tech: 'テクノロジー',
-      beauty: '美容',
-      food: 'グルメ'
-    };
-    return names[category] || 'エンターテインメント';
-  }
-
-  /**
-   * タグ生成
-   */
-  generateTags(category) {
-    const tagSets = {
-      entertainment: ['エンタメ', '芸能', 'ニュース', '話題', '2025'],
-      anime: ['アニメ', '声優', '新作', '2025年冬アニメ', 'おすすめ'],
-      game: ['ゲーム', '新作', 'レビュー', '攻略', 'PS5'],
-      movie: ['映画', '新作', 'レビュー', '興行収入', '2025'],
-      music: ['音楽', '新曲', 'ランキング', 'ライブ', 'J-POP'],
-      tech: ['テクノロジー', 'IT', 'ガジェット', 'AI', '最新技術'],
-      beauty: ['美容', 'コスメ', 'スキンケア', 'メイク', 'トレンド'],
-      food: ['グルメ', 'レシピ', 'レストラン', '料理', '食べ歩き']
-    };
-    return tagSets[category] || tagSets.entertainment;
-  }
+// 3. generateTags メソッドに追加（437行目付近）
+generateTags(category) {
+  const tagSets = {
+    entertainment: ['エンタメ', '芸能', 'ニュース', '話題', '2025'],
+    anime: ['アニメ', '声優', '新作', '2025年冬アニメ', 'おすすめ'],
+    game: ['ゲーム', '新作', 'レビュー', '攻略', 'PS5'],
+    movie: ['映画', '新作', 'レビュー', '興行収入', '2025'],
+    music: ['音楽', '新曲', 'ランキング', 'ライブ', 'J-POP'],
+    tech: ['テクノロジー', 'IT', 'ガジェット', 'AI', '最新技術'],
+    beauty: ['美容', 'コスメ', 'スキンケア', 'メイク', 'トレンド'],
+    food: ['グルメ', 'レシピ', 'レストラン', '料理', '食べ歩き'],
+    adult: ['18歳以上', 'アダルト', '大人向け', 'ライフスタイル', '教育的コンテンツ']  // 🔞 追加
+  };
+  return tagSets[category] || tagSets.entertainment;
+}
 
   /**
    * デフォルトタイトル生成
