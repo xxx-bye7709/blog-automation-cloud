@@ -1812,3 +1812,306 @@ exports.testDMMIntegration = functions
     });
   });
 
+// WordPress接続詳細診断
+exports.analyze403Error = functions
+  .region('asia-northeast1')
+  .runWith({ timeoutSeconds: 180, memory: '512MB' })
+  .https.onRequest(async (req, res) => {
+    return cors(req, res, async () => {
+      try {
+        console.log('🔍 WordPress 403エラー診断開始...');
+        
+        const axios = require('axios');
+        
+        // WordPress設定情報
+        const wpUrl = process.env.WP_URL || 'https://www.entamade.jp';
+        const username = process.env.WP_USERNAME || 'entamade';
+        const password = process.env.WP_PASSWORD || '8fFf Ys5r dPUp TDPp 8oqg JWQy';
+        
+        const credentials = Buffer.from(`${username}:${password}`).toString('base64');
+        const tests = [];
+        
+        console.log('📋 基本情報確認...');
+        console.log(`WordPress URL: ${wpUrl}`);
+        console.log(`Username: ${username}`);
+        console.log(`Password length: ${password.length}`);
+        
+        // === Test 1: WordPress基本接続テスト ===
+        try {
+          console.log('🌐 Test 1: WordPress基本接続テスト');
+          
+          const basicResponse = await axios.get(wpUrl, {
+            timeout: 10000,
+            headers: {
+              'User-Agent': 'BlogAutomation-Diagnosis/1.0'
+            }
+          });
+          
+          tests.push({
+            name: 'WordPress Basic Connection',
+            status: 'success',
+            statusCode: basicResponse.status,
+            message: 'WordPress サイトに正常接続'
+          });
+          
+        } catch (error) {
+          tests.push({
+            name: 'WordPress Basic Connection',
+            status: 'failed',
+            error: error.message,
+            statusCode: error.response?.status || 'timeout'
+          });
+        }
+        
+        // === Test 2: XML-RPC エンドポイント確認 ===
+        try {
+          console.log('🔌 Test 2: XML-RPC エンドポイント確認');
+          
+          const xmlrpcResponse = await axios.get(`${wpUrl}/xmlrpc.php`, {
+            timeout: 10000,
+            headers: {
+              'User-Agent': 'BlogAutomation-Diagnosis/1.0'
+            }
+          });
+          
+          tests.push({
+            name: 'XML-RPC Endpoint Check',
+            status: 'success',
+            statusCode: xmlrpcResponse.status,
+            message: 'XML-RPC エンドポイントにアクセス可能',
+            responsePreview: xmlrpcResponse.data.substring(0, 200)
+          });
+          
+        } catch (error) {
+          tests.push({
+            name: 'XML-RPC Endpoint Check',
+            status: 'failed',
+            error: error.message,
+            statusCode: error.response?.status,
+            message: 'XML-RPC エンドポイントへのアクセスに失敗'
+          });
+        }
+        
+        // === Test 3: XML-RPC システム機能テスト ===
+        try {
+          console.log('⚙️ Test 3: XML-RPC システム機能テスト');
+          
+          const systemXML = `<?xml version="1.0"?>
+<methodCall>
+  <methodName>system.getCapabilities</methodName>
+  <params></params>
+</methodCall>`;
+          
+          const systemResponse = await axios.post(`${wpUrl}/xmlrpc.php`, systemXML, {
+            headers: {
+              'Content-Type': 'text/xml',
+              'User-Agent': 'BlogAutomation-Diagnosis/1.0'
+            },
+            timeout: 15000
+          });
+          
+          tests.push({
+            name: 'XML-RPC System Capabilities',
+            status: 'success',
+            statusCode: systemResponse.status,
+            message: 'XML-RPC システム機能が有効',
+            responseLength: systemResponse.data.length
+          });
+          
+        } catch (error) {
+          tests.push({
+            name: 'XML-RPC System Capabilities',
+            status: 'failed',
+            error: error.message,
+            statusCode: error.response?.status,
+            responseData: error.response?.data?.substring(0, 300)
+          });
+        }
+        
+        // === Test 4: WordPress認証テスト ===
+        try {
+          console.log('🔐 Test 4: WordPress認証テスト');
+          
+          const authXML = `<?xml version="1.0"?>
+<methodCall>
+  <methodName>wp.getProfile</methodName>
+  <params>
+    <param><value><int>1</int></value></param>
+    <param><value><string>${username}</string></value></param>
+    <param><value><string>${password}</string></value></param>
+  </params>
+</methodCall>`;
+          
+          const authResponse = await axios.post(`${wpUrl}/xmlrpc.php`, authXML, {
+            headers: {
+              'Content-Type': 'text/xml',
+              'Authorization': `Basic ${credentials}`,
+              'User-Agent': 'BlogAutomation-Diagnosis/1.0'
+            },
+            timeout: 15000
+          });
+          
+          tests.push({
+            name: 'WordPress Authentication',
+            status: 'success',
+            statusCode: authResponse.status,
+            message: 'WordPress認証成功',
+            hasUserProfile: authResponse.data.includes('<struct>')
+          });
+          
+        } catch (error) {
+          tests.push({
+            name: 'WordPress Authentication',
+            status: 'failed',
+            error: error.message,
+            statusCode: error.response?.status,
+            message: '認証に失敗 - ユーザー名またはパスワードが間違っている可能性',
+            responseData: error.response?.data?.substring(0, 500)
+          });
+        }
+        
+        // === Test 5: 最小限の投稿テスト ===
+        try {
+          console.log('📝 Test 5: 最小限の投稿テスト');
+          
+          const minimalPostXML = `<?xml version="1.0"?>
+<methodCall>
+  <methodName>wp.newPost</methodName>
+  <params>
+    <param><value><int>1</int></value></param>
+    <param><value><string>${username}</string></value></param>
+    <param><value><string>${password}</string></value></param>
+    <param>
+      <value>
+        <struct>
+          <member>
+            <name>post_type</name>
+            <value><string>post</string></value>
+          </member>
+          <member>
+            <name>post_status</name>
+            <value><string>draft</string></value>
+          </member>
+          <member>
+            <name>post_title</name>
+            <value><string>Diagnosis Test</string></value>
+          </member>
+          <member>
+            <name>post_content</name>
+            <value><string>This is a minimal test post for diagnosis.</string></value>
+          </member>
+        </struct>
+      </value>
+    </param>
+  </params>
+</methodCall>`;
+          
+          const postResponse = await axios.post(`${wpUrl}/xmlrpc.php`, minimalPostXML, {
+            headers: {
+              'Content-Type': 'text/xml',
+              'Authorization': `Basic ${credentials}`,
+              'User-Agent': 'BlogAutomation-Diagnosis/1.0'
+            },
+            timeout: 20000
+          });
+          
+          // 投稿IDを抽出
+          const postIdMatch = postResponse.data.match(/<string>(\d+)<\/string>|<int>(\d+)<\/int>/);
+          const postId = postIdMatch ? (postIdMatch[1] || postIdMatch[2]) : null;
+          
+          tests.push({
+            name: 'Minimal Post Creation',
+            status: 'success',
+            statusCode: postResponse.status,
+            message: '最小限の投稿テスト成功',
+            postId: postId,
+            responsePreview: postResponse.data.substring(0, 300)
+          });
+          
+        } catch (error) {
+          tests.push({
+            name: 'Minimal Post Creation',
+            status: 'failed',
+            error: error.message,
+            statusCode: error.response?.status,
+            message: '投稿作成に失敗',
+            responseData: error.response?.data?.substring(0, 800),
+            headers: error.response?.headers
+          });
+        }
+        
+        // === 診断結果の分析 ===
+        const successfulTests = tests.filter(test => test.status === 'success').length;
+        const totalTests = tests.length;
+        const successRate = ((successfulTests / totalTests) * 100).toFixed(1);
+        
+        // 403エラーの詳細分析
+        const has403Error = tests.some(test => test.statusCode === 403);
+        const hasAuthError = tests.some(test => test.error && test.error.includes('authentication'));
+        const hasXMLRPCError = tests.some(test => test.error && test.error.includes('XML-RPC'));
+        
+        let diagnosis = {
+          overall: successRate > 80 ? 'healthy' : successRate > 50 ? 'warning' : 'critical',
+          primaryIssue: 'unknown'
+        };
+        
+        if (has403Error) {
+          diagnosis.primaryIssue = 'security_restriction';
+          diagnosis.description = 'WordPressセキュリティ機能またはプラグインによる403ブロック';
+          diagnosis.recommendations = [
+            'WordPressセキュリティプラグイン（Wordfence等）の設定確認',
+            'XML-RPC機能の有効化確認',
+            '特定キーワードフィルターの確認',
+            'IP制限設定の確認'
+          ];
+        } else if (hasAuthError) {
+          diagnosis.primaryIssue = 'authentication_failure';
+          diagnosis.description = 'WordPress認証エラー';
+          diagnosis.recommendations = [
+            'アプリケーションパスワードの再生成',
+            'ユーザー権限の確認',
+            'パスワード形式の確認（スペース等）'
+          ];
+        } else if (hasXMLRPCError) {
+          diagnosis.primaryIssue = 'xmlrpc_disabled';
+          diagnosis.description = 'XML-RPC機能が無効化されている';
+          diagnosis.recommendations = [
+            'WordPress管理画面でXML-RPC有効化',
+            'プラグインによるXML-RPC制限の確認',
+            'REST API使用への切り替え検討'
+          ];
+        }
+        
+        console.log('✅ 診断完了');
+        
+        res.json({
+          success: true,
+          message: 'WordPress 403エラー診断完了',
+          summary: {
+            totalTests: totalTests,
+            successfulTests: successfulTests,
+            successRate: `${successRate}%`,
+            overallHealth: diagnosis.overall
+          },
+          diagnosis: diagnosis,
+          detailedTests: tests,
+          wordpressInfo: {
+            url: wpUrl,
+            username: username,
+            xmlrpcEndpoint: `${wpUrl}/xmlrpc.php`
+          },
+          timestamp: new Date().toISOString()
+        });
+        
+      } catch (error) {
+        console.error('診断プロセスエラー:', error);
+        res.status(500).json({
+          success: false,
+          error: error.message,
+          message: '診断プロセス自体でエラーが発生しました',
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+  });
+
