@@ -480,16 +480,22 @@ getDefaultTemplate(category) {
         '食材の豆知識'
       ]
     },
-    // 🔞 アダルトカテゴリを追加
-    adult: {
+    // 🌟 大人向けライフスタイルカテゴリを追加
+    lifestyle: {
       topics: [
         '大人の恋愛心理学',
-        'セクシュアルウェルネス入門',
-        'カップルのコミュニケーション術',
+        '健康的な人間関係の築き方',
+        'パートナーとのコミュニケーション術',
         '大人向けライフスタイル情報',
-        '健全な関係性について',
-        'アダルト業界トレンド分析'
+        '現代の恋愛事情',
+        '自己啓発と人間関係'
       ],
+      focus: {
+        educational: true,
+        constructive: true,
+        mature: true
+      }
+    }
       compliance: {
         ageRestriction: true,
         educationalFocus: true,
@@ -512,7 +518,7 @@ getCategoryName(category) {
     tech: 'テクノロジー',
     beauty: '美容',
     food: 'グルメ',
-    adult: 'アダルト'  // 🔞 追加
+    lifestyle: 'ライフスタイル'  // 🌟 adult → lifestyle に変更
   };
   return names[category] || 'エンターテインメント';
 }
@@ -528,8 +534,8 @@ generateTags(category) {
     tech: ['テクノロジー', 'IT', 'ガジェット', 'AI', '最新技術'],
     beauty: ['美容', 'コスメ', 'スキンケア', 'メイク', 'トレンド'],
     food: ['グルメ', 'レシピ', 'レストラン', '料理', '食べ歩き'],
-    adult: ['18歳以上', 'アダルト', '大人向け', 'ライフスタイル', '教育的コンテンツ']  // 🔞 追加
-  };
+    lifestyle: ['大人向け', 'ライフスタイル', '恋愛', '人間関係', '自己啓発', '心理学']  // 🌟 健全なタグに変更
+    };
   return tagSets[category] || tagSets.entertainment;
 }
 
