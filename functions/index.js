@@ -212,7 +212,7 @@ exports.generateRandomArticle = functions
 
 // === 位置1: 229行目付近（generateRandomArticle の直後）に追加 ===
 
-// アダルト記事生成（年齢制限・コンプライアンス対応版）
+// 大人向けライフスタイル記事生成（WordPressフレンドリー版）
 exports.generateAdultArticle = functions
   .region('asia-northeast1')
   .runWith({ timeoutSeconds: 300, memory: '512MB' })
@@ -221,112 +221,108 @@ exports.generateAdultArticle = functions
       const startTime = Date.now();
       
       try {
-        console.log('🔞 アダルト記事生成開始...');
+        console.log('💼 大人向けライフスタイル記事生成開始...');
         
-        // 年齢確認パラメータ（オプション）
-        const ageVerified = req.query.verified === 'true';
-        const contentLevel = req.query.level || 'moderate'; // strict, moderate, relaxed
+        const contentLevel = req.query.level || 'moderate';
         
         loadModules();
         const blogTool = new BlogAutomationTool();
         
-        // アダルト専用記事生成
-        const article = await generateAdultSpecificArticle(blogTool, contentLevel);
+        // WordPressフレンドリーな大人向け記事生成
+        const article = await generateMatureLifestyleArticle(blogTool, contentLevel);
         
-        // WordPress投稿（アダルトカテゴリ設定）
+        // WordPress投稿（カテゴリを lifestyle に変更）
         const result = await blogTool.postToWordPress({
           ...article,
-          category: 'adult',
-          tags: [...article.tags, '18歳以上', 'アダルト', '大人向け'],
+          category: 'lifestyle',  // 'adult' → 'lifestyle' に変更
+          tags: [...article.tags, '大人向け', 'ライフスタイル', '恋愛'],  // 刺激的な単語を削除
           meta: {
-            ageRestriction: '18+',
             contentLevel: contentLevel,
-            robotsTag: 'noindex,nofollow'
+            targetAudience: 'mature'
           }
         });
         
         const duration = Date.now() - startTime;
-        console.log(`✅ アダルト記事投稿完了 (${duration}ms)`);
+        console.log(`✅ 大人向けライフスタイル記事投稿完了 (${duration}ms)`);
         
         res.json({
           success: true,
-          message: 'アダルト記事が正常に投稿されました',
+          message: '大人向けライフスタイル記事が正常に投稿されました',
           postId: result.postId,
           url: result.url,
           title: result.title,
-          category: 'adult',
-          ageRestriction: '18+',
+          category: 'lifestyle',
           contentLevel: contentLevel,
           duration: `${duration}ms`,
           timestamp: new Date().toISOString()
         });
         
       } catch (error) {
-        console.error('アダルト記事生成エラー:', error);
+        console.error('大人向けライフスタイル記事生成エラー:', error);
         res.status(500).json({
           success: false,
           error: error.message,
-          category: 'adult'
+          category: 'lifestyle'
         });
       }
     });
   });
 
-// アダルト専用記事生成関数（ヘルパー関数）
-async function generateAdultSpecificArticle(blogTool, contentLevel = 'moderate') {
-  const adultTopics = {
+// WordPressフレンドリーな大人向け記事生成関数
+async function generateMatureLifestyleArticle(blogTool, contentLevel = 'moderate') {
+  const matureTopics = {
     strict: [
       '大人の恋愛心理学',
-      'カップルのコミュニケーション術',
-      '健全な関係性について',
+      'パートナーとのコミュニケーション術',
+      '健全な人間関係の築き方',
       '大人のライフスタイル提案'
     ],
     moderate: [
       '大人の恋愛コラム',
-      'セクシュアルウェルネス入門',
-      '大人向けエンターテインメント解説',
-      'カップル向けライフスタイル',
-      '恋愛心理学の基礎'
+      '健康的な関係性について',
+      'パートナーシップの心理学',
+      '大人の自己啓発',
+      '恋愛における心理的成長'
     ],
     relaxed: [
-      'アダルト業界トレンド分析',
-      '大人向け商品レビュー',
-      'セクシュアリティ教育コンテンツ',
-      '大人の趣味・嗜好について',
-      'アダルトエンタメ業界研究'
+      '現代の恋愛事情',
+      '大人のデートスタイル',
+      'パートナーシップの新しい形',
+      '大人の趣味とライフスタイル',
+      '恋愛と心理学の関係'
     ]
   };
   
-  const topics = adultTopics[contentLevel] || adultTopics.moderate;
+  const topics = matureTopics[contentLevel] || matureTopics.moderate;
   const selectedTopic = topics[Math.floor(Math.random() * topics.length)];
   
   const prompt = `
-あなたは成人向けコンテンツの専門ライターです。
-以下の要件に従って、適切で価値のある記事を書いてください。
+あなたは大人向けライフスタイル専門のライターです。
+以下の要件に従って、健全で価値のある記事を書いてください。
 
 【トピック】: ${selectedTopic}
-【コンテンツレベル】: ${contentLevel}
+【対象読者】: 大人の読者（成熟した大人向け）
+【アプローチ】: 教育的・建設的
 
-【必須要件】:
-1. 18歳未満閲覧禁止の明確な表示
-2. 教育的・情報提供的な価値のある内容
-3. 健全な価値観と責任ある行動の推進
-4. 法律とモラルに配慮した表現
-5. 過度にグラフィックな表現は避ける
+【記事の方針】:
+1. 健全で建設的な内容
+2. 心理学的・社会学的観点からの情報提供
+3. 読者の人生に価値をもたらす内容
+4. 品格のある表現と言葉選び
+5. 実用的なアドバイスの提供
 
 【記事構造】:
-- タイトル: 「【18歳以上限定】」プレフィックス付き
-- 年齢確認の注意書き（必須）
-- 導入（トピックの重要性・背景）
-- 本文（教育的観点からの詳細解説）
-- 実践的なアドバイスや情報
-- 責任ある行動への言及
-- まとめ（建設的なメッセージ）
+- タイトル: 品格があり、検索されやすい
+- 導入（なぜこのトピックが重要か）
+- 本文（専門的観点からの詳細解説）
+- 実践的なアドバイス
+- まとめ（前向きなメッセージ）
 
-【文字数】: 1400-2000文字
+【文字数】: 1400-1800文字
+【トーン】: 知的で成熟した、教育的
 
 HTMLタグを使用して構造化してください。
-教育的価値と責任ある情報提供を最優先してください。
+読者に価値を提供する質の高い内容を重視してください。
 `;
 
   try {
@@ -335,51 +331,49 @@ HTMLタグを使用して構造化してください。
       messages: [
         {
           role: 'system',
-          content: `あなたは成人向け教育コンテンツの専門家です。責任ある情報提供を行い、健全な価値観を推進します。コンテンツレベル: ${contentLevel}`
+          content: `あなたは大人向けライフスタイルの専門家です。健全で教育的な内容を提供し、読者の人生に価値をもたらします。`
         },
         {
           role: 'user', 
           content: prompt
         }
       ],
-      temperature: 0.6,
-      max_tokens: 2800
+      temperature: 0.7,
+      max_tokens: 2500
     });
 
     const content = response.choices[0].message.content;
     
-    // アダルトコンテンツ専用の構造化
-    return parseAdultArticleContent(content, contentLevel, selectedTopic);
+    // WordPress フレンドリーな構造化
+    return parseMatureLifestyleContent(content, contentLevel, selectedTopic);
     
   } catch (error) {
-    console.error('アダルト記事GPT生成エラー:', error);
-    return generateFallbackAdultArticle(selectedTopic, contentLevel);
+    console.error('大人向けライフスタイル記事GPT生成エラー:', error);
+    return generateFallbackMatureArticle(selectedTopic, contentLevel);
   }
 }
 
-// アダルト記事コンテンツの構造化
-function parseAdultArticleContent(content, contentLevel, topic) {
+// WordPress フレンドリーなコンテンツ構造化
+function parseMatureLifestyleContent(content, contentLevel, topic) {
   // タイトル抽出・調整
   const titleMatch = content.match(/<h1[^>]*>(.*?)<\/h1>/i) || 
                      content.match(/^#\s+(.+)$/m);
   
   let title = titleMatch 
     ? titleMatch[1].replace(/<[^>]*>/g, '').trim()
-    : `【18歳以上限定】${topic}について`;
+    : `【大人向け】${topic}について考える`;
     
-  // 18歳以上限定プレフィックスを確実に追加
-  if (!title.includes('【18歳以上') && !title.includes('【大人限定')) {
-    title = `【18歳以上限定】${title}`;
-  }
+  // より健全な表現に調整
+  title = title.replace(/18歳以上/g, '大人向け')
+               .replace(/アダルト/g, '成人向け')
+               .replace(/限定/g, '専門');
 
-  // 年齢確認警告を記事の最初に追加
-  const ageWarning = `
-<div style="background: linear-gradient(135deg, #ff6b6b, #ee5a52); color: white; padding: 25px; margin: 20px 0; border-radius: 12px; text-align: center; box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);">
-  <h3 style="margin: 0 0 15px 0; color: white; font-size: 24px;">⚠️ 年齢確認・利用規約</h3>
-  <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; margin: 10px 0;">
-    <p style="margin: 0; font-weight: bold; font-size: 18px;">この記事は18歳以上の方を対象としています</p>
-    <p style="margin: 10px 0 0 0; font-size: 14px;">18歳未満の方は閲覧をご遠慮ください</p>
-  </div>
+  // 健全な注意書きを記事の最初に追加
+  const matureNotice = `
+<div style="background: linear-gradient(135deg, #4a90e2, #357abd); color: white; padding: 20px; margin: 20px 0; border-radius: 8px; text-align: center;">
+  <h3 style="margin: 0 0 10px 0; color: white; font-size: 20px;">🌟 大人の読者へ</h3>
+  <p style="margin: 0; font-size: 16px;">この記事は成熟した大人の読者を対象とした内容です</p>
+  <p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;">人生経験豊富な方々にお役立ていただけるよう心を込めて作成しました</p>
 </div>
 `;
 
@@ -389,80 +383,79 @@ function parseAdultArticleContent(content, contentLevel, topic) {
     bodyContent = content.replace(titleMatch[0], '').trim();
   }
   
-  // 年齢確認を本文の最初に挿入
-  bodyContent = ageWarning + bodyContent;
+  // 健全な注意書きを本文の最初に挿入
+  bodyContent = matureNotice + bodyContent;
   
-  // 責任ある利用に関するフッターを追加
-  const responsibleFooter = `
-<div style="background: #f8f9fa; border: 2px solid #dee2e6; border-radius: 8px; padding: 25px; margin: 40px 0;">
+  // 建設的なメッセージフッターを追加
+  const constructiveFooter = `
+<div style="background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 8px; padding: 20px; margin: 30px 0;">
   <h4 style="margin: 0 0 15px 0; color: #495057; display: flex; align-items: center;">
-    <span style="margin-right: 10px;">📋</span>
-    責任ある利用について
+    <span style="margin-right: 10px;">💡</span>
+    より良い人生のために
   </h4>
   <div style="color: #6c757d; line-height: 1.6;">
     <ul style="margin: 0; padding-left: 20px;">
-      <li>この情報は教育・情報提供目的で制作されています</li>
-      <li>個人の価値観や状況に応じて適切に判断してください</li>
-      <li>法律や社会規範を遵守してご利用ください</li>
-      <li>疑問や悩みがある場合は専門家にご相談ください</li>
+      <li>この情報が皆様の人生により良い価値をもたらすことを願っています</li>
+      <li>個人の価値観や状況に応じて適切にご活用ください</li>
+      <li>より詳しい情報が必要な場合は専門家にご相談ください</li>
+      <li>健全で充実した大人のライフスタイルを共に築いていきましょう</li>
     </ul>
   </div>
 </div>
 `;
 
-  bodyContent += responsibleFooter;
+  bodyContent += constructiveFooter;
 
-  // 抜粋生成（年齢制限の注意を含む）
+  // 抜粋生成（健全な表現）
   const plainText = bodyContent.replace(/<[^>]*>/g, '');
-  const excerpt = `【18歳以上対象】${plainText.substring(0, 120)}...`;
+  const excerpt = `【大人向けライフスタイル】${plainText.substring(0, 120)}...`;
 
   return {
     title,
     content: bodyContent,
     excerpt,
-    category: 'adult',
-    tags: ['18歳以上', 'アダルト', '大人向け', topic, '教育的コンテンツ', contentLevel],
+    category: 'lifestyle',  // adult → lifestyle に変更
+    tags: ['大人向け', 'ライフスタイル', '恋愛', topic, '自己啓発', '人間関係'],  // 健全なタグに変更
     status: 'publish',
     format: 'standard',
     author: 1,
     meta: {
-      ageRestriction: '18+',
-      contentType: 'adult-educational',
-      contentLevel: contentLevel,
-      robotsTag: 'noindex,nofollow'
+      targetAudience: 'mature',
+      contentType: 'lifestyle-educational',
+      contentLevel: contentLevel
     }
   };
 }
 
-// フォールバックアダルト記事
-function generateFallbackAdultArticle(topic, contentLevel) {
+// フォールバック記事（健全版）
+function generateFallbackMatureArticle(topic, contentLevel) {
   return {
-    title: `【18歳以上限定】${topic} - 大人のための情報ガイド`,
+    title: `【大人向けライフスタイル】${topic} - 人生をより豊かにするヒント`,
     content: `
-<div style="background: linear-gradient(135deg, #ff6b6b, #ee5a52); color: white; padding: 25px; margin: 20px 0; border-radius: 12px; text-align: center;">
-  <h3 style="margin: 0 0 15px 0; color: white;">⚠️ 年齢確認</h3>
-  <p style="margin: 0; font-weight: bold;">この記事は18歳以上の方を対象としています。</p>
+<div style="background: linear-gradient(135deg, #4a90e2, #357abd); color: white; padding: 20px; margin: 20px 0; border-radius: 8px; text-align: center;">
+  <h3 style="margin: 0 0 10px 0; color: white;">🌟 大人の読者へ</h3>
+  <p style="margin: 0;">この記事は成熟した大人の読者を対象としています</p>
 </div>
 
-<p>成人向けの ${topic} について、教育的観点から情報をお届けします。</p>
+<p>大人の ${topic} について、建設的な観点から情報をお届けします。</p>
 
-<h2>大人として知っておきたいポイント</h2>
-<p>現代社会において、適切な知識と理解を持つことは重要です。</p>
+<h2>現代社会での重要性</h2>
+<p>現代において、適切な知識と理解を持つことは重要です。</p>
 
-<h2>責任ある判断のために</h2>
-<p>個人の価値観や状況に応じて、適切な判断を行うことが大切です。</p>
+<h2>実践的なアプローチ</h2>
+<p>個人の価値観や状況に応じて、建設的な判断を行うことが大切です。</p>
 
 <h2>まとめ</h2>
-<p>正しい知識と責任ある行動で、健全な大人のライフスタイルを築きましょう。</p>
+<p>正しい知識と前向きな行動で、充実した大人のライフスタイルを築きましょう。</p>
 
 <div style="background: #f8f9fa; border-left: 4px solid #6c757d; padding: 20px; margin: 30px 0;">
-  <h4 style="margin: 0 0 10px 0; color: #6c757d;">📝 責任ある利用について</h4>
-  <p style="color: #6c757d;">この情報は教育目的で提供されています。法律や社会規範を遵守してご利用ください。</p>
+  <h4 style="margin: 0 0 10px 0; color: #6c757d;">💡 より良い人生のために</h4>
+  <p style="color: #6c757d;">この情報が皆様の人生により良い価値をもたらすことを願っています。</p>
 </div>
 `,
-    excerpt: `【18歳以上対象】${topic}について、教育的観点から大人向けの情報をお届けします。`,
-    category: 'adult',
-    tags: ['18歳以上', 'アダルト', '大人向け', topic, '教育的コンテンツ'],
+    excerpt: `【大人向けライフスタイル】${topic}について、建設的な観点から情報をお届けします。`,
+    category: 'lifestyle',
+    tags: ['大人向け', 'ライフスタイル', topic, '自己啓発'],
     status: 'publish'
   };
 }
@@ -1437,8 +1430,8 @@ exports.intelligentScheduledPost = functions
       
       // カテゴリに応じた記事生成
       let article;
-      if (category === 'adult') {
-        article = await generateAdultSpecificArticle(blogTool, 'moderate');
+      if (category === 'lifestyle') {  // adult → lifestyle に変更
+        article = await generateMatureLifestyleArticle(blogTool, 'moderate');
       } else {
         article = await blogTool.generateArticle(category);
       }
@@ -1492,20 +1485,21 @@ exports.weeklyBatchScheduler = functions
         { category: 'tech', count: 2 },
         { category: 'beauty', count: 1 },
         { category: 'food', count: 1 },
-        { category: 'adult', count: 2 }
+        { category: 'lifestyle', count: 2 }  // adult → lifestyle に変更
       ];
       
       const blogTool = new BlogAutomationTool();
       const results = [];
       
+      // ループ内の条件も修正
       for (const plan of weeklyPlan) {
         console.log(`📝 ${plan.category}: ${plan.count}記事生成中...`);
         
         for (let i = 0; i < plan.count; i++) {
           try {
             let article;
-            if (plan.category === 'adult') {
-              article = await generateAdultSpecificArticle(blogTool, 'moderate');
+            if (plan.category === 'lifestyle') {  // adult → lifestyle に変更
+              article = await generateMatureLifestyleArticle(blogTool, 'moderate');
             } else {
               article = await blogTool.generateArticle(plan.category);
             }
@@ -1575,8 +1569,8 @@ exports.eventBasedScheduler = functions
             count: intensity === 'high' ? 12 : 6,
             interval: 2000
           },
-          'adult-feature': {
-            categories: ['adult'],
+          'lifestyle-feature': {  // adult-feature → lifestyle-feature に変更
+            categories: ['lifestyle'],
             count: intensity === 'high' ? 6 : 3,
             interval: 6000
           }
@@ -1601,8 +1595,8 @@ exports.eventBasedScheduler = functions
           
           try {
             let article;
-            if (category === 'adult') {
-              article = await generateAdultSpecificArticle(blogTool, 'moderate');
+            if (category === 'lifestyle') {  // adult → lifestyle に変更
+              article = await generateMatureLifestyleArticle(blogTool, 'moderate');
             } else {
               article = await blogTool.generateArticle(category);
             }
@@ -1656,7 +1650,7 @@ exports.eventBasedScheduler = functions
 function selectCategoryByTime(hour, dayOfWeek) {
   // 深夜・早朝 (0-6時)
   if (hour >= 0 && hour < 6) {
-    return Math.random() < 0.3 ? 'adult' : 'anime';
+    return Math.random() < 0.3 ? 'lifestyle' : 'anime';  // adult → lifestyle
   }
   
   // 朝 (6-9時)
@@ -1686,9 +1680,9 @@ function selectCategoryByTime(hour, dayOfWeek) {
   
   // 夜 (21-24時)
   if (hour >= 21 && hour < 24) {
-    // 土日は adult 確率を上げる
-    const adultProbability = (dayOfWeek === 0 || dayOfWeek === 6) ? 0.4 : 0.2;
-    if (Math.random() < adultProbability) return 'adult';
+    // 土日は lifestyle 確率を上げる
+    const lifestyleProbability = (dayOfWeek === 0 || dayOfWeek === 6) ? 0.4 : 0.2;
+    if (Math.random() < lifestyleProbability) return 'lifestyle';  // adult → lifestyle
     return Math.random() < 0.6 ? 'anime' : 'game';
   }
   
