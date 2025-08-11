@@ -538,6 +538,8 @@ generateTags(category) {
     return `【${date}】${categoryName}の最新情報まとめ`;
   }
 
+  // blog-tool.js の generateFallbackArticle メソッドから getDefaultTemplate メソッドまでを確認
+
   /**
    * フォールバック記事
    */
@@ -577,6 +579,153 @@ generateTags(category) {
       throw new Error('コンテンツが短すぎます');
     }
     return true;
+  }
+
+  /**
+   * テンプレート取得
+   */
+  getTemplate(category) {
+    if (this.templates && this.templates[category]) {
+      return this.templates[category];
+    }
+    return this.getDefaultTemplate(category);
+  }
+
+  /**
+   * デフォルトテンプレート
+   */
+  getDefaultTemplate(category) {
+    const templates = {
+      entertainment: {
+        topics: [
+          '最新の芸能ニュース',
+          '話題のドラマ・バラエティ',
+          '注目のタレント・俳優',
+          'エンタメ業界の裏話'
+        ]
+      },
+      anime: {
+        topics: [
+          '今期の注目アニメ',
+          '人気声優の最新情報',
+          'アニメ映画レビュー',
+          '原作とアニメの違い'
+        ]
+      },
+      game: {
+        topics: [
+          '新作ゲームレビュー',
+          'ゲーム攻略情報',
+          'eスポーツ最新情報',
+          'レトロゲーム特集'
+        ]
+      },
+      movie: {
+        topics: [
+          '話題の新作映画',
+          '映画館での体験',
+          '名作映画の解説',
+          '映画業界のトレンド'
+        ]
+      },
+      music: {
+        topics: [
+          '新曲リリース情報',
+          'ライブ・コンサート情報',
+          'アーティストインタビュー',
+          '音楽ストリーミング動向'
+        ]
+      },
+      tech: {
+        topics: [
+          '最新ガジェットレビュー',
+          'AI・テクノロジートレンド',
+          'プログラミング入門',
+          'デジタルライフハック'
+        ]
+      },
+      beauty: {
+        topics: [
+          'スキンケア最新情報',
+          'メイクアップトレンド',
+          '美容成分の解説',
+          'セルフケア方法'
+        ]
+      },
+      food: {
+        topics: [
+          '話題のレストラン',
+          '簡単レシピ紹介',
+          'グルメトレンド',
+          '食材の豆知識'
+        ]
+      },
+      lifestyle: {
+        topics: [
+          '大人の恋愛心理学',
+          '健康的な人間関係の築き方',
+          'パートナーとのコミュニケーション術',
+          '大人向けライフスタイル情報',
+          '現代の恋愛事情',
+          '自己啓発と人間関係'
+        ]
+      }
+    };
+    
+    return templates[category] || templates.entertainment;
+  }
+
+  /**
+   * デフォルトトピック
+   */
+  getDefaultTopics(category) {
+    const template = this.getDefaultTemplate(category);
+    return template.topics;
+  }
+
+  /**
+   * カテゴリー名取得
+   */
+  getCategoryName(category) {
+    const names = {
+      entertainment: 'エンターテインメント',
+      anime: 'アニメ',
+      game: 'ゲーム',
+      movie: '映画',
+      music: '音楽',
+      tech: 'テクノロジー',
+      beauty: '美容',
+      food: 'グルメ',
+      lifestyle: 'ライフスタイル'
+    };
+    return names[category] || 'エンターテインメント';
+  }
+
+  /**
+   * タグ生成
+   */
+  generateTags(category) {
+    const tagSets = {
+      entertainment: ['エンタメ', '芸能', 'ニュース', '話題', '2025'],
+      anime: ['アニメ', '声優', '新作', '2025年冬アニメ', 'おすすめ'],
+      game: ['ゲーム', '新作', 'レビュー', '攻略', 'PS5'],
+      movie: ['映画', '新作', 'レビュー', '興行収入', '2025'],
+      music: ['音楽', '新曲', 'ランキング', 'ライブ', 'J-POP'],
+      tech: ['テクノロジー', 'IT', 'ガジェット', 'AI', '最新技術'],
+      beauty: ['美容', 'コスメ', 'スキンケア', 'メイク', 'トレンド'],
+      food: ['グルメ', 'レシピ', 'レストラン', '料理', '食べ歩き'],
+      lifestyle: ['大人向け', 'ライフスタイル', '恋愛', '人間関係', '自己啓発', '心理学']
+    };
+    return tagSets[category] || tagSets.entertainment;
+  }
+
+  /**
+   * デフォルトタイトル生成
+   */
+  generateDefaultTitle(category) {
+    const date = new Date().toLocaleDateString('ja-JP');
+    const categoryName = this.getCategoryName(category);
+    return `【${date}】${categoryName}の最新情報まとめ`;
   }
 }
 
