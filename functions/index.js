@@ -14,6 +14,8 @@ const cors = require('cors')({
   allowedHeaders: ['Content-Type', 'Authorization']
 });
 
+// .envファイルは自動的に読み込まれる（Firebase Functions v4.8.0以降）
+
 // 遅延読み込み用の変数
 let BlogAutomationTool;
 let ImageGenerator;
@@ -51,7 +53,7 @@ function initializeServices() {
   }
 }
 
-// ヘルパー関数
+// === ヘルパー関数 ===
 const generateArticleForCategory = async (category) => {
   loadModules();
   const blogTool = new BlogAutomationTool();
@@ -60,7 +62,7 @@ const generateArticleForCategory = async (category) => {
   return result;
 };
 
-// === 既存の記事生成関数（8カテゴリー） ===
+// === 既存の記事生成関数（8カテゴリー） - CORS対応 ===
 
 // エンタメ記事生成
 exports.generateEntertainmentArticle = functions
@@ -71,6 +73,136 @@ exports.generateEntertainmentArticle = functions
       try {
         const result = await generateArticleForCategory('entertainment');
         res.json({ success: true, ...result });
+      } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+  });
+
+// アニメ記事生成
+exports.generateAnimeArticle = functions
+  .region('asia-northeast1')
+  .runWith({ timeoutSeconds: 300, memory: '512MB' })
+  .https.onRequest(async (req, res) => {
+    return cors(req, res, async () => {
+      try {
+        const result = await generateArticleForCategory('anime');
+        res.json({ success: true, ...result });
+      } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+  });
+
+// ゲーム記事生成
+exports.generateGameArticle = functions
+  .region('asia-northeast1')
+  .runWith({ timeoutSeconds: 300, memory: '512MB' })
+  .https.onRequest(async (req, res) => {
+    return cors(req, res, async () => {
+      try {
+        const result = await generateArticleForCategory('game');
+        res.json({ success: true, ...result });
+      } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+  });
+
+// 映画記事生成
+exports.generateMovieArticle = functions
+  .region('asia-northeast1')
+  .runWith({ timeoutSeconds: 300, memory: '512MB' })
+  .https.onRequest(async (req, res) => {
+    return cors(req, res, async () => {
+      try {
+        const result = await generateArticleForCategory('movie');
+        res.json({ success: true, ...result });
+      } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+  });
+
+// 音楽記事生成
+exports.generateMusicArticle = functions
+  .region('asia-northeast1')
+  .runWith({ timeoutSeconds: 300, memory: '512MB' })
+  .https.onRequest(async (req, res) => {
+    return cors(req, res, async () => {
+      try {
+        const result = await generateArticleForCategory('music');
+        res.json({ success: true, ...result });
+      } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+  });
+
+// テック記事生成
+exports.generateTechArticle = functions
+  .region('asia-northeast1')
+  .runWith({ timeoutSeconds: 300, memory: '512MB' })
+  .https.onRequest(async (req, res) => {
+    return cors(req, res, async () => {
+      try {
+        const result = await generateArticleForCategory('tech');
+        res.json({ success: true, ...result });
+      } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+  });
+
+// 美容記事生成
+exports.generateBeautyArticle = functions
+  .region('asia-northeast1')
+  .runWith({ timeoutSeconds: 300, memory: '512MB' })
+  .https.onRequest(async (req, res) => {
+    return cors(req, res, async () => {
+      try {
+        const result = await generateArticleForCategory('beauty');
+        res.json({ success: true, ...result });
+      } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+  });
+
+// グルメ記事生成
+exports.generateFoodArticle = functions
+  .region('asia-northeast1')
+  .runWith({ timeoutSeconds: 300, memory: '512MB' })
+  .https.onRequest(async (req, res) => {
+    return cors(req, res, async () => {
+      try {
+        const result = await generateArticleForCategory('food');
+        res.json({ success: true, ...result });
+      } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+  });
+
+// ランダム記事生成
+exports.generateRandomArticle = functions
+  .region('asia-northeast1')
+  .runWith({ timeoutSeconds: 300, memory: '512MB' })
+  .https.onRequest(async (req, res) => {
+    return cors(req, res, async () => {
+      try {
+        const categories = ['entertainment', 'anime', 'game', 'movie', 'music', 'tech', 'beauty', 'food'];
+        const randomCategory = categories[Math.floor(Math.random() * categories.length)];
+        const result = await generateArticleForCategory(randomCategory);
+        res.json({ success: true, category: randomCategory, ...result });
       } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ success: false, error: error.message });
@@ -192,55 +324,6 @@ exports.batchGeneratePosts = functions
         
       } catch (error) {
         console.error('Batch generation failed:', error);
-        res.status(500).json({ 
-          success: false, 
-          error: error.message 
-        });
-      }
-    });
-  });
-
-// 他のカテゴリーの関数も同様に追加...
-// (アニメ、ゲーム、映画、音楽、テック、美容、グルメ)
-
-// === 新規追加：商品ファースト機能 ===
-
-// 商品ファースト記事生成
-exports.generateProductFirstArticle = functions
-  .region('asia-northeast1')
-  .runWith({ timeoutSeconds: 300, memory: '512MB' })
-  .https.onRequest(async (req, res) => {
-    return cors(req, res, async () => {
-      try {
-        const category = req.query.category || 'entertainment';
-        
-        console.log('🎯 商品ファースト記事生成開始');
-        
-        const ProductFirstBlogTool = require('./lib/product-first-blog-tool');
-        const blogTool = new ProductFirstBlogTool();
-        
-        const result = await blogTool.generateProductFocusedArticle(category);
-        
-        const BlogAutomationTool = require('./lib/blog-tool');
-        const wpTool = new BlogAutomationTool();
-        const postResult = await wpTool.postToWordPress(result.article);
-        
-        res.json({
-          success: true,
-          postId: postResult.postId,
-          title: result.article.title,
-          category: category,
-          url: postResult.url,
-          featuredProduct: {
-            title: result.featuredProduct.title,
-            price: result.featuredProduct.price,
-            affiliateUrl: result.featuredProduct.affiliateUrl
-          },
-          message: '商品ファースト記事を投稿しました'
-        });
-        
-      } catch (error) {
-        console.error('商品ファースト記事生成エラー:', error);
         res.status(500).json({ 
           success: false, 
           error: error.message 
