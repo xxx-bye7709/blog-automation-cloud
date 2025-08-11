@@ -208,7 +208,7 @@ HTMLタグを使用して出力してください。
   }
 
   /**
-   * WordPressに投稿（詳細ログ付き）
+   * WordPressに投稿（正確なPost ID抽出版）
    */
   async postToWordPress(article) {
     try {
@@ -229,35 +229,31 @@ HTMLタグを使用して出力してください。
         }
       );
 
-      // 🔍 詳細デバッグログ
+      // 🔍 簡潔なデバッグログ
       console.log('📨 WordPress Response Status:', response.status);
-      console.log('📨 WordPress Response Headers:', JSON.stringify(response.headers, null, 2));
-      console.log('📨 WordPress Response Data Type:', typeof response.data);
-      console.log('📨 WordPress Response Length:', response.data?.length || 0);
-      console.log('📨 WordPress Raw Response (first 800 chars):');
-      console.log(response.data.substring(0, 800));
+      console.log('📨 WordPress Response (first 300 chars):', response.data.substring(0, 300));
 
-      // レスポンスから投稿IDを抽出（複数パターンで試行）
+      // レスポンスから投稿IDを抽出（正確なパターン順）
       let postId = null;
       
       if (typeof response.data === 'string') {
-        // パターン1: 標準的なXML-RPC成功レスポンス
-        const standardMatch = response.data.match(/<int>(\d+)<\/int>/);
-        if (standardMatch) {
-          postId = standardMatch[1];
-          console.log('✅ Standard Pattern Match - Post ID:', postId);
+        // パターン1: <string>数字</string> - 実際のWordPress形式
+        const stringMatch = response.data.match(/<string>(\d+)<\/string>/);
+        if (stringMatch) {
+          postId = stringMatch[1];
+          console.log('✅ String Pattern Match - Post ID:', postId);
         }
         
-        // パターン2: 異なるXML構造
+        // パターン2: <int>数字</int> - 標準的なXML-RPC形式
         if (!postId) {
-          const altMatch = response.data.match(/<value><int>(\d+)<\/int><\/value>/);
-          if (altMatch) {
-            postId = altMatch[1];
-            console.log('✅ Alternative Pattern Match - Post ID:', postId);
+          const intMatch = response.data.match(/<int>(\d+)<\/int>/);
+          if (intMatch) {
+            postId = intMatch[1];
+            console.log('✅ Int Pattern Match - Post ID:', postId);
           }
         }
         
-        // パターン3: i4タグ（32bit integer）
+        // パターン3: <i4>数字</i4> - 32bit integer形式
         if (!postId) {
           const i4Match = response.data.match(/<i4>(\d+)<\/i4>/);
           if (i4Match) {
@@ -266,66 +262,53 @@ HTMLタグを使用して出力してください。
           }
         }
         
-        // パターン4: methodResponse内の数値を検索
+        // パターン4: <value>数字</value> 
         if (!postId) {
-          const allNumbers = response.data.match(/\d+/g);
-          if (allNumbers && allNumbers.length > 0) {
-            // レスポンス内の最初の数値を Post ID とみなす
-            postId = allNumbers.find(num => parseInt(num) > 0);
-            if (postId) {
-              console.log('✅ Fallback Numeric Pattern Match - Post ID:', postId);
-            }
+          const valueMatch = response.data.match(/<value>(\d+)<\/value>/);
+          if (valueMatch) {
+            postId = valueMatch[1];
+            console.log('✅ Value Pattern Match - Post ID:', postId);
           }
         }
         
-        // エラーパターンの確認
+        // エラーチェック
         const faultMatch = response.data.match(/<fault>/);
         if (faultMatch) {
           const errorMatch = response.data.match(/<name>faultString<\/name>\s*<value><string>(.*?)<\/string>/);
           const errorMessage = errorMatch ? errorMatch[1] : 'Unknown WordPress XML-RPC Fault';
-          console.error('❌ WordPress Fault detected:', errorMessage);
+          console.error('❌ WordPress Fault:', errorMessage);
           throw new Error(`WordPress Error: ${errorMessage}`);
         }
       }
 
-      if (postId) {
+      if (postId && parseInt(postId) > 0) {
         console.log(`✅ 投稿成功！ Post ID: ${postId}`);
         return {
           success: true,
           postId,
           url: `${this.wpUrl}/?p=${postId}`,
           title: article.title,
-          imageUrl: article.featuredImage || null,
-          rawResponse: response.data.substring(0, 200) + '...' // デバッグ用
+          imageUrl: article.featuredImage || null
         };
       } else {
-        // 投稿IDが見つからない場合の詳細ログ
-        console.error('❌ 投稿IDパターンマッチング失敗');
-        console.error('📋 Tried patterns:');
-        console.error('   - <int>\\d+</int>');
-        console.error('   - <value><int>\\d+</int></value>');
-        console.error('   - <i4>\\d+</i4>');
-        console.error('   - First numeric value in response');
-        console.error('📄 Full Response for analysis:');
-        console.error(response.data);
+        console.error('❌ 有効な投稿IDが見つかりません');
+        console.error('📄 Full Response:', response.data);
         
-        throw new Error(`投稿IDを取得できませんでした。Response Status: ${response.status}`);
+        throw new Error(`有効な投稿IDを取得できませんでした。Response: ${response.data.substring(0, 200)}`);
       }
       
     } catch (error) {
       console.error('WordPress投稿エラー:', error.message);
       
-      // Axiosエラーの詳細情報
       if (error.response) {
-        console.error('❌ Error Response Status:', error.response.status);
-        console.error('❌ Error Response Headers:', error.response.headers);
-        console.error('❌ Error Response Data:', error.response.data);
+        console.error('❌ Error Status:', error.response.status);
+        console.error('❌ Error Data:', error.response.data);
       }
       
       throw error;
     }
   }
-
+  
   /**
    * WordPress XML-RPC リクエストを作成
    */
