@@ -441,37 +441,104 @@ HTMLタグ（<h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>）のみ使用`;
 - 前年同月との比較データ（可能な場合）`;
   }
 
-  /**
-   * GPTレスポンスをパース
-   */
+
   parseGPTResponse(content, category) {
-    const titleMatch = content.match(/<h1[^>]*>(.*?)<\/h1>/i) || 
-                       content.match(/^#\s+(.+)$/m) ||
-                       content.match(/タイトル[：:]\s*(.+)$/m);
-    
-    const title = titleMatch 
-      ? titleMatch[1].replace(/<[^>]*>/g, '').trim()
-      : this.generateDefaultTitle(category);
-
-    let bodyContent = content;
-    if (titleMatch) {
-      bodyContent = content.replace(titleMatch[0], '').trim();
+  // デバッグログ追加
+  console.log('[parseGPTResponse] Content length:', content.length);
+  console.log('[parseGPTResponse] First 300 chars:', content.substring(0, 300));
+  
+  // タイトル抽出パターンを拡張
+  const titlePatterns = [
+    /<h1[^>]*>(.*?)<\/h1>/i,        // <h1>タイトル</h1>
+    /<h2[^>]*>(.*?)<\/h2>/i,        // <h2>タイトル</h2> (GPTがh1の代わりにh2を使う場合)
+    /^#\s+(.+)$/m,                  // # タイトル (Markdown形式)
+    /^##\s+(.+)$/m,                 // ## タイトル
+    /^【.*?】.+$/m,                 // 【2024年】タイトル形式
+    /タイトル[：:]\s*(.+)$/m,       // タイトル: 内容
+    /^Title[：:]\s*(.+)$/im,        // Title: 内容（英語）
+    /^題名[：:]\s*(.+)$/m           // 題名: 内容
+  ];
+  
+  let title = null;
+  let matchedPattern = null;
+  
+  // 各パターンを試す
+  for (const pattern of titlePatterns) {
+    const match = content.match(pattern);
+    if (match) {
+      // 【】形式の場合は全体を使用、それ以外はグループ1を使用
+      if (pattern.source.includes('【')) {
+        title = match[0].trim();
+      } else {
+        title = match[1] ? match[1].replace(/<[^>]*>/g, '').trim() : null;
+      }
+      
+      if (title && title.length > 10) {  // 10文字以上のタイトルのみ有効
+        matchedPattern = match[0];
+        console.log('[Title Found]:', title);
+        console.log('[Pattern Used]:', pattern.source);
+        break;
+      }
     }
-
-    const plainText = bodyContent.replace(/<[^>]*>/g, '');
-    const excerpt = plainText.substring(0, 150) + '...';
-
-    return {
-      title,
-      content: bodyContent,
-      excerpt,
-      category,
-      tags: this.generateTags(category),
-      status: 'publish',
-      format: 'standard',
-      author: 1
-    };
   }
+  
+  // タイトルが見つからない場合、最初の行をタイトルとして試す
+  if (!title) {
+    const firstLine = content.split('\n')[0];
+    if (firstLine && firstLine.length > 10 && firstLine.length < 100) {
+      title = firstLine.replace(/<[^>]*>/g, '').trim();
+      console.log('[Using First Line as Title]:', title);
+      matchedPattern = firstLine;
+    }
+  }
+  
+  // それでもタイトルがない場合はデフォルト
+  if (!title) {
+    console.log('[No Title Found] Using default title');
+    title = this.generateDefaultTitle(category);
+  }
+  
+  // タイトルが長すぎる場合は切り詰める
+  if (title.length > 60) {
+    title = title.substring(0, 57) + '...';
+    console.log('[Title Trimmed]:', title);
+  }
+  
+  // 本文からタイトル部分を削除
+  let bodyContent = content;
+  if (matchedPattern) {
+    bodyContent = content.replace(matchedPattern, '').trim();
+  }
+  
+  // 本文が空の場合は元のコンテンツを使用
+  if (!bodyContent || bodyContent.length < 100) {
+    console.log('[Warning] Body content too short, using full content');
+    bodyContent = content;
+  }
+  
+  // 抜粋を生成
+  const plainText = bodyContent.replace(/<[^>]*>/g, '');
+  const excerpt = plainText.substring(0, 150) + '...';
+  
+  // 結果をログ
+  console.log('[parseGPTResponse Result]', {
+    titleLength: title.length,
+    contentLength: bodyContent.length,
+    hasTitle: !!matchedPattern,
+    category: category
+  });
+  
+  return {
+    title,
+    content: bodyContent,
+    excerpt,
+    category,
+    tags: this.generateTags(category),
+    status: 'publish',
+    format: 'standard',
+    author: 1
+  };
+}
 
   /**
    * GPTコンテンツの品質検証
