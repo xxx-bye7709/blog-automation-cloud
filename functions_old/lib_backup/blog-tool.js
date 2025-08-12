@@ -260,7 +260,7 @@ HTMLタグ（<h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>）のみ使用`;
         await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
       }
     }
-  }
+  },
 
   /**
  * 現在の季節を取得
@@ -270,7 +270,7 @@ getCurrentSeason(month) {
   if (month >= 6 && month <= 8) return '夏';
   if (month >= 9 && month <= 11) return '秋';
   return '冬';
-}
+},
 
 /**
  * 動的なトピック提案を生成
