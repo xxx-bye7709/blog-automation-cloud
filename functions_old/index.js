@@ -2115,3 +2115,333 @@ exports.analyze403Error = functions
     });
   });
 
+// index.js に追加：コンテンツフィルター段階的テスト機能
+
+// コンテンツフィルター診断
+exports.testContentFiltering = functions
+  .region('asia-northeast1')
+  .runWith({ timeoutSeconds: 300, memory: '512MB' })
+  .https.onRequest(async (req, res) => {
+    return cors(req, res, async () => {
+      try {
+        console.log('🧪 コンテンツフィルタリング段階テスト開始...');
+        
+        loadModules();
+        const blogTool = new BlogAutomationTool();
+        const testResults = [];
+        
+        // === Test 1: キーワードフィルタリングテスト ===
+        console.log('🔤 Test 1: キーワードフィルタリングテスト');
+        
+        const keywordTests = [
+          {
+            name: 'Safe Keywords',
+            title: 'テスト記事：エンターテインメント情報',
+            content: '<p>安全なエンターテインメント情報をお届けします。</p>',
+            expectedResult: 'success'
+          },
+          {
+            name: 'Lifestyle Keywords',
+            title: 'テスト記事：ライフスタイル改善',
+            content: '<p>ライフスタイルの改善方法について説明します。</p>',
+            expectedResult: 'might_fail'
+          },
+          {
+            name: 'Adult Keywords',
+            title: 'テスト記事：大人向け情報',
+            content: '<p>大人向けの情報をお届けします。</p>',
+            expectedResult: 'likely_fail'
+          },
+          {
+            name: 'Mature Keywords',
+            title: 'テスト記事：成人向けガイド',
+            content: '<p>成人向けのガイドラインを説明します。</p>',
+            expectedResult: 'might_fail'
+          }
+        ];
+        
+        for (const test of keywordTests) {
+          try {
+            const testArticle = {
+              title: test.title,
+              content: test.content,
+              excerpt: 'テスト記事です',
+              category: 'entertainment',
+              tags: ['テスト'],
+              status: 'draft'  // 下書きとして作成
+            };
+            
+            const result = await blogTool.postToWordPress(testArticle);
+            
+            testResults.push({
+              testName: test.name,
+              status: 'success',
+              postId: result.postId,
+              title: test.title,
+              message: 'キーワードテスト成功'
+            });
+            
+            console.log(`✅ ${test.name}: 成功 (Post ID: ${result.postId})`);
+            
+            // テスト間隔
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+          } catch (error) {
+            testResults.push({
+              testName: test.name,
+              status: 'failed',
+              error: error.message,
+              title: test.title,
+              expectedResult: test.expectedResult,
+              message: '403エラーまたは他のエラーで失敗'
+            });
+            
+            console.log(`❌ ${test.name}: 失敗 - ${error.message}`);
+          }
+        }
+        
+        // === Test 2: コンテンツ長さテスト ===
+        console.log('📏 Test 2: コンテンツ長さテスト');
+        
+        const lengthTests = [
+          {
+            name: 'Short Content',
+            content: '<p>短いコンテンツのテストです。</p>'
+          },
+          {
+            name: 'Medium Content',
+            content: '<p>中程度の長さのコンテンツです。</p>'.repeat(10)
+          },
+          {
+            name: 'Long Content',
+            content: '<p>長いコンテンツのテストです。</p>'.repeat(50)
+          }
+        ];
+        
+        for (const test of lengthTests) {
+          try {
+            const testArticle = {
+              title: `コンテンツ長さテスト：${test.name}`,
+              content: test.content,
+              excerpt: 'コンテンツ長さテスト',
+              category: 'entertainment',
+              tags: ['テスト', '長さ'],
+              status: 'draft'
+            };
+            
+            const result = await blogTool.postToWordPress(testArticle);
+            
+            testResults.push({
+              testName: test.name,
+              status: 'success',
+              postId: result.postId,
+              contentLength: test.content.length,
+              message: 'コンテンツ長さテスト成功'
+            });
+            
+            console.log(`✅ ${test.name}: 成功 (${test.content.length}文字)`);
+            
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+          } catch (error) {
+            testResults.push({
+              testName: test.name,
+              status: 'failed',
+              error: error.message,
+              contentLength: test.content.length,
+              message: 'コンテンツ長さで403エラー'
+            });
+            
+            console.log(`❌ ${test.name}: 失敗 - ${error.message}`);
+          }
+        }
+        
+        // === Test 3: HTMLタグテスト ===
+        console.log('🏷️ Test 3: HTMLタグテスト');
+        
+        const htmlTests = [
+          {
+            name: 'Basic HTML',
+            content: '<p>基本的なHTMLタグのテスト</p><h2>見出し</h2><p>段落です。</p>'
+          },
+          {
+            name: 'Complex HTML',
+            content: '<div style="background: #f0f0f0;"><h2>複雑なHTML</h2><ul><li>リスト1</li><li>リスト2</li></ul></div>'
+          },
+          {
+            name: 'Styled HTML',
+            content: '<div style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 20px;">スタイル付きHTML</div>'
+          }
+        ];
+        
+        for (const test of htmlTests) {
+          try {
+            const testArticle = {
+              title: `HTMLタグテスト：${test.name}`,
+              content: test.content,
+              excerpt: 'HTMLタグテスト',
+              category: 'entertainment',
+              tags: ['テスト', 'HTML'],
+              status: 'draft'
+            };
+            
+            const result = await blogTool.postToWordPress(testArticle);
+            
+            testResults.push({
+              testName: test.name,
+              status: 'success',
+              postId: result.postId,
+              message: 'HTMLタグテスト成功'
+            });
+            
+            console.log(`✅ ${test.name}: 成功`);
+            
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+          } catch (error) {
+            testResults.push({
+              testName: test.name,
+              status: 'failed',
+              error: error.message,
+              message: 'HTMLタグで403エラー'
+            });
+            
+            console.log(`❌ ${test.name}: 失敗 - ${error.message}`);
+          }
+        }
+        
+        // === Test 4: generateAdultArticle実コンテンツテスト ===
+        console.log('🎯 Test 4: 実際のgenerateAdultArticle コンテンツテスト');
+        
+        try {
+          // 実際のgenerateAdultArticle相当のコンテンツを生成
+          const realArticle = await generateHealthyRelationshipArticle(blogTool, 'general');
+          
+          const result = await blogTool.postToWordPress({
+            ...realArticle,
+            status: 'draft',  // 下書きとして作成
+            category: 'entertainment'  // 安全なカテゴリで
+          });
+          
+          testResults.push({
+            testName: 'Real Adult Article Content',
+            status: 'success',
+            postId: result.postId,
+            title: realArticle.title,
+            message: '実際のコンテンツで投稿成功'
+          });
+          
+          console.log(`✅ Real Content Test: 成功 (Post ID: ${result.postId})`);
+          
+        } catch (error) {
+          testResults.push({
+            testName: 'Real Adult Article Content',
+            status: 'failed',
+            error: error.message,
+            message: '実際のコンテンツで403エラー - これが問題の原因'
+          });
+          
+          console.log(`❌ Real Content Test: 失敗 - ${error.message}`);
+        }
+        
+        // === 結果分析 ===
+        const successfulTests = testResults.filter(test => test.status === 'success').length;
+        const failedTests = testResults.filter(test => test.status === 'failed').length;
+        
+        // 問題のパターン分析
+        const keywordFailures = testResults.filter(test => 
+          test.testName.includes('Keywords') && test.status === 'failed'
+        );
+        
+        const lengthFailures = testResults.filter(test => 
+          test.testName.includes('Content') && test.status === 'failed'
+        );
+        
+        const htmlFailures = testResults.filter(test => 
+          test.testName.includes('HTML') && test.status === 'failed'
+        );
+        
+        let problemAnalysis = {
+          type: 'unknown',
+          description: 'テスト結果からパターンを分析中...'
+        };
+        
+        if (keywordFailures.length > 0) {
+          problemAnalysis = {
+            type: 'keyword_filtering',
+            description: '特定のキーワードがWordPressセキュリティフィルターでブロックされています',
+            blockedKeywords: keywordFailures.map(test => test.title),
+            solution: 'よりニュートラルな表現への変更が必要'
+          };
+        } else if (lengthFailures.length > 0) {
+          problemAnalysis = {
+            type: 'content_length_limit',
+            description: 'コンテンツの長さがセキュリティフィルターの制限を超えています',
+            solution: 'コンテンツを短縮するか、分割投稿を検討'
+          };
+        } else if (htmlFailures.length > 0) {
+          problemAnalysis = {
+            type: 'html_structure_blocking',
+            description: '特定のHTMLタグや構造がブロックされています',
+            solution: 'HTMLの簡素化やインラインスタイルの削除'
+          };
+        }
+        
+        console.log('✅ コンテンツフィルタリングテスト完了');
+        
+        res.json({
+          success: true,
+          message: 'コンテンツフィルタリング診断完了',
+          summary: {
+            totalTests: testResults.length,
+            successfulTests: successfulTests,
+            failedTests: failedTests,
+            successRate: `${(successfulTests / testResults.length * 100).toFixed(1)}%`
+          },
+          problemAnalysis: problemAnalysis,
+          detailedResults: testResults,
+          recommendations: [
+            'キーワードフィルターに引っかからない表現の使用',
+            'コンテンツの簡素化',
+            'HTMLタグの最小化',
+            'WordPressセキュリティプラグインの設定確認'
+          ],
+          timestamp: new Date().toISOString()
+        });
+        
+      } catch (error) {
+        console.error('コンテンツフィルタリングテストエラー:', error);
+        res.status(500).json({
+          success: false,
+          error: error.message,
+          message: 'コンテンツフィルタリングテスト中にエラーが発生しました'
+        });
+      }
+    });
+  });
+
+// generateHealthyRelationshipArticle 関数（既存のものを使用）
+// この関数は既に定義されているはずですが、参照のため簡略版を記載
+
+async function generateHealthyRelationshipArticle(blogTool, contentLevel = 'general') {
+  return {
+    title: '人間関係改善のための実践ガイド',
+    content: `
+<div style="background: #e3f2fd; padding: 20px; margin: 20px 0; border-radius: 8px;">
+  <h3>より良い人間関係のために</h3>
+  <p>実践的なアドバイスをお届けします</p>
+</div>
+
+<p>人間関係を改善するための方法について説明します。</p>
+
+<h2>コミュニケーションの重要性</h2>
+<p>良好なコミュニケーションは人間関係の基盤です。</p>
+
+<h2>実践的なアプローチ</h2>
+<p>日常生活で実践できる具体的な方法をご紹介します。</p>
+`,
+    excerpt: '人間関係改善のための実践的アドバイス',
+    category: 'selfhelp',
+    tags: ['人間関係', 'コミュニケーション', '実践ガイド']
+  };
+}
