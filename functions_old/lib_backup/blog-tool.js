@@ -66,7 +66,10 @@ class BlogAutomationTool {
     } catch (error) {
       console.log('テンプレートモジュールが見つかりません');
     }
-  }
+    // レート制限対策
+  this.lastAPICall = 0;
+  this.minTimeBetweenCalls = 3000; // 3秒間隔
+}
 
   /**
    * 記事生成のメインフロー
@@ -132,57 +135,66 @@ class BlogAutomationTool {
     }
   }
 
-  /**
-   * GPTで記事を生成（改善版）
-   */
-  async generateWithGPT(category, template) {
-    const categoryName = this.getCategoryName(category);
-    const topics = template.topics || this.getDefaultTopics(category);
-    const selectedTopic = topics[Math.floor(Math.random() * topics.length)];
-    
-    // 現在の日時情報を取得
-    const now = new Date();
-    const month = now.getMonth() + 1;
-    const season = this.getCurrentSeason(month);
-    const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][now.getDay()];
-    
-    // 季節・時期別のコンテキスト
-    const seasonalContext = {
-      '冬': {
-        anime: '冬アニメの新作情報、年末年始特番、コミケ情報',
-        game: '年末商戦、ゲームアワード、福袋情報',
-        movie: 'アカデミー賞候補作、年末年始の大作映画',
-        music: '紅白歌合戦、年間ランキング、冬フェス'
-      },
-      '春': {
-        anime: '春アニメ新番組、卒業・入学シーズン作品',
-        game: '新生活応援セール、春の新作ラッシュ',
-        movie: '春休み映画、卒業シーズン作品',
-        music: '卒業ソング、春フェス、新人アーティスト'
-      },
-      '夏': {
-        anime: '夏アニメ、夏休み特別編、海・プール回',
-        game: '夏休み向けゲーム、e-sports大会',
-        movie: '夏の大作映画、ホラー映画',
-        music: '夏フェス、花火大会BGM、夏ソング'
-      },
-      '秋': {
-        anime: '秋アニメ、秋の夜長に見たい作品',
-        game: '東京ゲームショウ、年末商戦前哨戦',
-        movie: '秋の映画祭、芸術作品',
-        music: '秋の音楽祭、紅葉シーズンBGM'
-      }
-    };
+  // generateWithGPTメソッド - 既存のプロンプトを完全維持
+async generateWithGPT(category, template) {
+  // === レート制限対策部分のみ追加 ===
+  const now = Date.now();
+  const timeSinceLastCall = now - this.lastAPICall;
+  if (timeSinceLastCall < this.minTimeBetweenCalls) {
+    const waitTime = this.minTimeBetweenCalls - timeSinceLastCall;
+    console.log(`[Rate Limit Prevention] Waiting ${waitTime}ms`);
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+  }
+  this.lastAPICall = Date.now();
+  
+  // ========== 以下、既存のコードを完全に維持 ==========
+  const categoryName = this.getCategoryName(category);
+  const topics = template.topics || this.getDefaultTopics(category);
+  const selectedTopic = topics[Math.floor(Math.random() * topics.length)];
+  
+  // 現在の日時情報を取得（既存のまま）
+  const now2 = new Date();
+  const month = now2.getMonth() + 1;
+  const season = this.getCurrentSeason(month);
+  const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][now2.getDay()];
+  
+  // 季節・時期別のコンテキスト（既存のまま）
+  const seasonalContext = {
+    '冬': {
+      anime: '冬アニメの新作情報、年末年始特番、コミケ情報',
+      game: '年末商戦、ゲームアワード、福袋情報',
+      movie: 'アカデミー賞候補作、年末年始の大作映画',
+      music: '紅白歌合戦、年間ランキング、冬フェス'
+    },
+    '春': {
+      anime: '春アニメ新番組、卒業・入学シーズン作品',
+      game: '新生活応援セール、春の新作ラッシュ',
+      movie: '春休み映画、卒業シーズン作品',
+      music: '卒業ソング、春フェス、新人アーティスト'
+    },
+    '夏': {
+      anime: '夏アニメ、夏休み特別編、海・プール回',
+      game: '夏休み向けゲーム、e-sports大会',
+      movie: '夏の大作映画、ホラー映画',
+      music: '夏フェス、花火大会BGM、夏ソング'
+    },
+    '秋': {
+      anime: '秋アニメ、秋の夜長に見たい作品',
+      game: '東京ゲームショウ、年末商戦前哨戦',
+      movie: '秋の映画祭、芸術作品',
+      music: '秋の音楽祭、紅葉シーズンBGM'
+    }
+  };
 
-    const currentContext = seasonalContext[season]?.[category] || '';
+  const currentContext = seasonalContext[season]?.[category] || '';
 
-    // 強化版プロンプト
-    const prompt = `
+  // 強化版プロンプト（既存のまま完全維持）
+  const prompt = `
 あなたは${categoryName}分野で5年以上の経験を持つプロのWebライターです。
 常に最新の社会情勢とトレンドを把握し、タイムリーな記事を作成してください。
 
 【執筆コンテキスト】
-- 現在日時: ${now.toLocaleDateString('ja-JP')} (${dayOfWeek}曜日)
+- 現在日時: ${now2.toLocaleDateString('ja-JP')} (${dayOfWeek}曜日)
 - 季節: ${season}
 - 季節の注目ポイント: ${currentContext}
 - ベーストピック: ${selectedTopic}
@@ -217,57 +229,63 @@ ${this.generateDynamicTopicSuggestions(category, month)}
 【出力形式】
 HTMLタグ（<h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>）のみ使用`;
 
-    // リトライロジック
-    const maxRetries = 3;
-    let lastError = null;
+  // リトライロジック（エラー処理を改善）
+  const maxRetries = 3;
+  let lastError = null;
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(`[GPT生成] 試行 ${attempt}/${maxRetries}`);
-        
-        const response = await this.openai.chat.completions.create({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: `あなたは日本の大手Webメディアで働く${categoryName}専門のライターです。SEOとユーザーエンゲージメントを重視した高品質な記事を作成します。`
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          temperature: 0.8,
-          max_tokens: 4000,
-          presence_penalty: 0.6,
-          frequency_penalty: 0.4
-        });
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[GPT生成] 試行 ${attempt}/${maxRetries}`);
+      
+      const response = await this.openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `あなたは日本の大手Webメディアで働く${categoryName}専門のライターです。SEOとユーザーエンゲージメントを重視した高品質な記事を作成します。`
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0.8,
+        max_tokens: 3500,  // 少し削減（4000→3500）
+        presence_penalty: 0.6,
+        frequency_penalty: 0.4
+      });
 
-        const content = response.choices[0].message.content;
-        
-        // 品質チェック
-        if (this.validateGPTContent(content)) {
-          console.log(`✅ GPT生成成功: ${content.length}文字`);
-          return this.parseGPTResponse(content, category);
-        } else {
-          console.log('品質チェック失敗、再生成します');
-          continue;
-        }
-        
-      } catch (error) {
-        lastError = error;
-        console.error(`GPT APIエラー (試行 ${attempt}):`, error.message);
-        
-        if (attempt < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
-        }
+      const content = response.choices[0].message.content;
+      
+      // 品質チェック（既存のまま）
+      if (this.validateGPTContent(content)) {
+        console.log(`✅ GPT生成成功: ${content.length}文字`);
+        return this.parseGPTResponse(content, category);
+      } else {
+        console.log('品質チェック失敗、再生成します');
+        continue;
+      }
+      
+    } catch (error) {
+      lastError = error;
+      console.error(`GPT APIエラー (試行 ${attempt}):`, error.message);
+      
+      // 429エラー専用の長い待機時間
+      if (error.status === 429) {
+        const waitTime = Math.min(60000, Math.pow(2, attempt) * 5000); // 5秒, 10秒, 20秒
+        console.log(`[429エラー] ${waitTime/1000}秒待機します`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      } else if (attempt < maxRetries) {
+        // その他のエラーは短い待機
+        await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
       }
     }
-
-    // 全試行失敗時
-    console.error('GPT生成に完全失敗、改善版フォールバックを使用');
-    return this.generateEnhancedFallback(category, selectedTopic);
   }
+
+  // 全試行失敗時（既存のまま）
+  console.error('GPT生成に完全失敗、改善版フォールバックを使用');
+  return this.generateEnhancedFallback(category, selectedTopic);
+}
 
   /**
    * 現在の季節を取得
