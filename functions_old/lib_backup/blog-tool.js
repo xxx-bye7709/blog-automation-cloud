@@ -669,6 +669,8 @@ async generateWithGPT(category, template) {
   
   const now2 = new Date();
   const month = now2.getMonth() + 1;
+  // ⭐ この行を追加
+  const year = now2.getFullYear();
   const season = this.getCurrentSeason(month);
   const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][now2.getDay()];
   
