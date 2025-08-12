@@ -260,7 +260,7 @@ HTMLタグ（<h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>）のみ使用`;
         await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
       }
     }
-  },
+  }
 
   /**
  * 現在の季節を取得
@@ -430,7 +430,7 @@ generateDynamicTopicSuggestions(category, month) {
 
   console.error('GPT生成に完全失敗、改善版フォールバックを使用');
   return this.generateEnhancedFallback(category, selectedTopic);
-}
+},
 
   /**
    * GPTレスポンスをパース
