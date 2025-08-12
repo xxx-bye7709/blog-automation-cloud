@@ -1,6 +1,5 @@
 // functions/lib/blog-tool.js
 // WordPress自動投稿システム - メインツール
-
 const axios = require('axios');
 const OpenAI = require('openai');
 
@@ -11,7 +10,20 @@ const QUALITY_CONFIG = {
   gptModel: 'gpt-4o-mini',
   temperature: 0.8,
   maxTokens: 4000,
-
+  
+  // カテゴリー別の具体的トピック（2024年最新）
+  categoryTopics: {
+    anime: ['フリーレン', '薬屋のひとりごと', '呪術廻戦3期', 'ダンジョン飯', '推しの子2期'],
+    game: ['パルワールド', 'ドラゴンズドグマ2', 'ヘルダイバーズ2', 'FF7リバース', '原神4.5'],
+    movie: ['デューン砂の惑星2', 'ゴジラ-1.0', 'オッペンハイマー', '君たちはどう生きるか'],
+    music: ['YOASOBI', 'Ado', 'NewJeans', 'King Gnu', '米津玄師'],
+    tech: ['Apple Vision Pro', 'Claude 3', 'Sora AI', 'Gemini', 'メタバース'],
+    beauty: ['レチノール', 'CICA', '韓国コスメ', 'ヴィーガンコスメ', 'メンズメイク'],
+    food: ['台湾カステラ', 'マリトッツォ', 'プロテイン食品', '昆虫食', '代替肉'],
+    entertainment: ['紅白歌合戦', 'M-1グランプリ', '芸能スキャンダル', 'YouTube', 'TikTok'],
+    selfhelp: ['リスキリング', 'FIRE', 'メンタルヘルス', 'ワークライフバランス', 'AI活用']
+  }
+};
 class BlogAutomationTool {
   constructor() {
     // OpenAI設定
