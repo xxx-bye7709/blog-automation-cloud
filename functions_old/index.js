@@ -210,11 +210,9 @@ exports.generateRandomArticle = functions
     });
   });
 
-// === 位置1: 229行目付近（generateRandomArticle の直後）に追加 ===
+// index.js の generateAdultArticle を以下のシンプルHTML版に置き換え
 
-// index.js の generateAdultArticle を以下の超健全版に置き換え
-
-// 人間関係記事生成（超健全版）
+// シンプルHTML版 人間関係記事生成
 exports.generateAdultArticle = functions
   .region('asia-northeast1')
   .runWith({ timeoutSeconds: 300, memory: '512MB' })
@@ -223,55 +221,58 @@ exports.generateAdultArticle = functions
       const startTime = Date.now();
       
       try {
-        console.log('💝 人間関係記事生成開始...');
+        console.log('💝 シンプルHTML版 人間関係記事生成開始...');
         
         const contentLevel = req.query.level || 'general';
         
         loadModules();
         const blogTool = new BlogAutomationTool();
         
-        // 超健全な人間関係記事生成
-        const article = await generateHealthyRelationshipArticle(blogTool, contentLevel);
+        // シンプルHTML版記事生成
+        const article = await generateSimpleHTMLRelationshipArticle(blogTool, contentLevel);
         
-        // WordPress投稿（完全に一般的なカテゴリ）
+        // WordPress投稿
         const result = await blogTool.postToWordPress({
           ...article,
-          category: 'selfhelp',  // lifestyle → selfhelp に変更
-          tags: [...article.tags, '自己啓発', '人間関係', '心理学'],  // 完全に健全なタグ
+          category: 'selfhelp',
+          tags: [...article.tags, '自己啓発', '人間関係', '心理学'],
           meta: {
             contentLevel: contentLevel,
-            targetAudience: 'general'
+            targetAudience: 'general',
+            htmlVersion: 'simple'
           }
         });
         
         const duration = Date.now() - startTime;
-        console.log(`✅ 人間関係記事投稿完了 (${duration}ms)`);
+        console.log(`✅ シンプルHTML版記事投稿完了 (${duration}ms)`);
         
         res.json({
           success: true,
-          message: '人間関係記事が正常に投稿されました',
+          message: 'シンプルHTML版人間関係記事が正常に投稿されました',
           postId: result.postId,
           url: result.url,
           title: result.title,
           category: 'selfhelp',
+          htmlVersion: 'simple',
           contentLevel: contentLevel,
           duration: `${duration}ms`,
           timestamp: new Date().toISOString()
         });
         
       } catch (error) {
-        console.error('人間関係記事生成エラー:', error);
+        console.error('シンプルHTML版記事生成エラー:', error);
         res.status(500).json({
           success: false,
           error: error.message,
-          category: 'selfhelp'
+          category: 'selfhelp',
+          htmlVersion: 'simple'
         });
       }
     });
   });
 
-// 超健全な人間関係記事生成関数
-async function generateHealthyRelationshipArticle(blogTool, contentLevel = 'general') {
+// シンプルHTML版記事生成関数
+async function generateSimpleHTMLRelationshipArticle(blogTool, contentLevel = 'general') {
   const healthyTopics = {
     strict: [
       'コミュニケーション能力の向上方法',
@@ -300,31 +301,35 @@ async function generateHealthyRelationshipArticle(blogTool, contentLevel = 'gene
   
   const prompt = `
 あなたは人間関係改善の専門家です。
-以下の要件に従って、建設的で価値のある記事を書いてください。
+以下の要件に従って、実用的な記事を書いてください。
 
 【トピック】: ${selectedTopic}
 【対象読者】: 人間関係を改善したいすべての人
-【アプローチ】: 心理学・社会学に基づく実践的アドバイス
+【重要な制約】: HTMLはシンプルなタグのみ使用（p, h2, h3, ul, li, strong, em）
 
 【記事の方針】:
 1. 科学的根拠に基づく内容
 2. 実践しやすい具体的なアドバイス
 3. 誰でも活用できる普遍的な内容
 4. 前向きで建設的なメッセージ
-5. 職場や友人関係で活用できる情報
+
+【HTML制約】:
+- スタイル属性は使用しない
+- divタグは使用しない
+- 複雑なHTMLは避ける
+- 基本的なタグのみ（p, h2, h3, ul, li, strong, em）
 
 【記事構造】:
 - タイトル: わかりやすく、実用的
 - 導入（なぜこのスキルが重要か）
 - 本文（具体的な方法・コツ）
-- 実践例や体験談
+- 実践例
 - まとめ（行動につながるメッセージ）
 
-【文字数】: 1200-1600文字
+【文字数】: 1000-1400文字
 【トーン】: 親しみやすく、励ましの気持ちを込めて
 
-HTMLタグを使用して構造化してください。
-読者の人生により良い変化をもたらす内容を心がけてください。
+基本的なHTMLタグのみを使用して構造化してください。
 `;
 
   try {
@@ -333,7 +338,7 @@ HTMLタグを使用して構造化してください。
       messages: [
         {
           role: 'system',
-          content: `あなたは人間関係とコミュニケーションの専門家です。科学的根拠に基づき、実践的で価値のあるアドバイスを提供します。`
+          content: `あなたは人間関係とコミュニケーションの専門家です。シンプルなHTMLのみを使用して、実践的で価値のあるアドバイスを提供します。`
         },
         {
           role: 'user', 
@@ -341,22 +346,22 @@ HTMLタグを使用して構造化してください。
         }
       ],
       temperature: 0.7,
-      max_tokens: 2200
+      max_tokens: 2000
     });
 
     const content = response.choices[0].message.content;
     
-    // 健全なコンテンツ構造化
-    return parseHealthyRelationshipContent(content, contentLevel, selectedTopic);
+    // シンプルHTML版コンテンツ構造化
+    return parseSimpleHTMLContent(content, contentLevel, selectedTopic);
     
   } catch (error) {
-    console.error('人間関係記事GPT生成エラー:', error);
-    return generateFallbackRelationshipArticle(selectedTopic, contentLevel);
+    console.error('シンプルHTML版記事GPT生成エラー:', error);
+    return generateFallbackSimpleArticle(selectedTopic, contentLevel);
   }
 }
 
-// 健全なコンテンツ構造化
-function parseHealthyRelationshipContent(content, contentLevel, topic) {
+// シンプルHTML版コンテンツ構造化
+function parseSimpleHTMLContent(content, contentLevel, topic) {
   // タイトル抽出・調整
   const titleMatch = content.match(/<h1[^>]*>(.*?)<\/h1>/i) || 
                      content.match(/^#\s+(.+)$/m);
@@ -364,52 +369,45 @@ function parseHealthyRelationshipContent(content, contentLevel, topic) {
   let title = titleMatch 
     ? titleMatch[1].replace(/<[^>]*>/g, '').trim()
     : `${topic}のための実践ガイド`;
-    
-  // 完全に健全な表現に調整
-  title = title.replace(/大人向け/g, '')
-               .replace(/アダルト/g, '')
-               .replace(/18歳以上/g, '')
-               .replace(/限定/g, '');
 
-  // 健全な案内を記事の最初に追加
-  const positiveNotice = `
-<div style="background: linear-gradient(135deg, #28a745, #20c997); color: white; padding: 20px; margin: 20px 0; border-radius: 8px; text-align: center;">
-  <h3 style="margin: 0 0 10px 0; color: white; font-size: 20px;">🌟 より良い人間関係のために</h3>
-  <p style="margin: 0; font-size: 16px;">科学的根拠に基づいた実践的なアドバイスをお届けします</p>
-  <p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;">皆様の人間関係がより豊かになることを願っています</p>
-</div>
+  // シンプルな案内を記事の最初に追加（スタイルなし）
+  const simpleNotice = `
+<p><strong>より良い人間関係のために</strong></p>
+<p>科学的根拠に基づいた実践的なアドバイスをお届けします。皆様の人間関係がより豊かになることを願っています。</p>
 `;
 
-  // 本文を整形
+  // 本文を整形（複雑なHTMLを削除）
   let bodyContent = content;
   if (titleMatch) {
     bodyContent = content.replace(titleMatch[0], '').trim();
   }
   
-  // 健全な案内を本文の最初に挿入
-  bodyContent = positiveNotice + bodyContent;
+  // スタイル属性とdivタグを削除
+  bodyContent = bodyContent
+    .replace(/style="[^"]*"/g, '')  // style属性を削除
+    .replace(/<div[^>]*>/g, '')     // 開始divタグを削除
+    .replace(/<\/div>/g, '')       // 終了divタグを削除
+    .replace(/class="[^"]*"/g, '')  // class属性も削除
+    .replace(/id="[^"]*"/g, '');    // id属性も削除
   
-  // 励ましのメッセージフッターを追加
-  const encouragementFooter = `
-<div style="background: #e3f2fd; border: 2px solid #1976d2; border-radius: 8px; padding: 20px; margin: 30px 0;">
-  <h4 style="margin: 0 0 15px 0; color: #1976d2; display: flex; align-items: center;">
-    <span style="margin-right: 10px;">💪</span>
-    実践して成長しましょう
-  </h4>
-  <div style="color: #1565c0; line-height: 1.6;">
-    <ul style="margin: 0; padding-left: 20px;">
-      <li>小さな一歩から始めることが大切です</li>
-      <li>継続することで必ず変化が現れます</li>
-      <li>周りの人との関係がより良くなることを願っています</li>
-      <li>困った時は信頼できる人に相談してみてください</li>
-    </ul>
-  </div>
-</div>
+  // シンプルな案内を本文の最初に挿入
+  bodyContent = simpleNotice + bodyContent;
+  
+  // シンプルな励ましメッセージを追加
+  const simpleFooter = `
+<h3>実践して成長しましょう</h3>
+<ul>
+  <li>小さな一歩から始めることが大切です</li>
+  <li>継続することで必ず変化が現れます</li>
+  <li>周りの人との関係がより良くなることを願っています</li>
+  <li>困った時は信頼できる人に相談してみてください</li>
+</ul>
+<p><strong>継続することで必ず良い変化が現れます。今日から実践してみませんか？</strong></p>
 `;
 
-  bodyContent += encouragementFooter;
+  bodyContent += simpleFooter;
 
-  // 抜粋生成（完全に健全な表現）
+  // 抜粋生成（シンプルな表現）
   const plainText = bodyContent.replace(/<[^>]*>/g, '');
   const excerpt = `人間関係改善のための実践的アドバイス。${plainText.substring(0, 100)}...`;
 
@@ -417,28 +415,27 @@ function parseHealthyRelationshipContent(content, contentLevel, topic) {
     title,
     content: bodyContent,
     excerpt,
-    category: 'selfhelp',  // lifestyle → selfhelp に変更
-    tags: ['人間関係', 'コミュニケーション', '自己啓発', topic, '心理学', '実践ガイド'],  // 完全に健全なタグ
+    category: 'selfhelp',
+    tags: ['人間関係', 'コミュニケーション', '自己啓発', topic, '心理学', '実践ガイド'],
     status: 'publish',
     format: 'standard',
     author: 1,
     meta: {
       targetAudience: 'general',
       contentType: 'relationship-advice',
-      contentLevel: contentLevel
+      contentLevel: contentLevel,
+      htmlVersion: 'simple'
     }
   };
 }
 
-// フォールバック記事（健全版）
-function generateFallbackRelationshipArticle(topic, contentLevel) {
+// フォールバックシンプル記事
+function generateFallbackSimpleArticle(topic, contentLevel) {
   return {
     title: `${topic}のための実践ガイド`,
     content: `
-<div style="background: linear-gradient(135deg, #28a745, #20c997); color: white; padding: 20px; margin: 20px 0; border-radius: 8px; text-align: center;">
-  <h3 style="margin: 0 0 10px 0; color: white;">🌟 より良い人間関係のために</h3>
-  <p style="margin: 0;">科学的根拠に基づいた実践的なアドバイスをお届けします</p>
-</div>
+<p><strong>より良い人間関係のために</strong></p>
+<p>科学的根拠に基づいた実践的なアドバイスをお届けします。</p>
 
 <p>${topic}について、実践的な観点から情報をお届けします。</p>
 
@@ -448,13 +445,19 @@ function generateFallbackRelationshipArticle(topic, contentLevel) {
 <h2>実践的なアプローチ</h2>
 <p>小さな一歩から始めて、継続的に改善していくことが大切です。</p>
 
+<h3>具体的な方法</h3>
+<ul>
+  <li>相手の話をよく聞く</li>
+  <li>感謝の気持ちを表現する</li>
+  <li>誠実なコミュニケーションを心がける</li>
+  <li>相手の立場に立って考える</li>
+</ul>
+
 <h2>まとめ</h2>
 <p>皆様の人間関係がより豊かになることを心から願っています。</p>
 
-<div style="background: #e3f2fd; border-left: 4px solid #1976d2; padding: 20px; margin: 30px 0;">
-  <h4 style="margin: 0 0 10px 0; color: #1976d2;">💪 実践して成長しましょう</h4>
-  <p style="color: #1565c0;">継続することで必ず良い変化が現れます。</p>
-</div>
+<h3>実践して成長しましょう</h3>
+<p><strong>継続することで必ず良い変化が現れます。今日から始めてみませんか？</strong></p>
 `,
     excerpt: `${topic}について、実践的な観点から人間関係改善のアドバイスをお届けします。`,
     category: 'selfhelp',
@@ -1431,13 +1434,14 @@ exports.intelligentScheduledPost = functions
       
       const blogTool = new BlogAutomationTool();
       
+      // === 修正箇所1: intelligentScheduledPost 内 ===
       // カテゴリに応じた記事生成
       let article;
-      if (category === 'selfhelp') {  // lifestyle → selfhelp
-  article = await generateHealthyRelationshipArticle(blogTool, 'general');
-} else {
-  article = await blogTool.generateArticle(category);
-}
+      if (category === 'selfhelp') {  
+        article = await generateSimpleHTMLRelationshipArticle(blogTool, 'general');  // 新しい関数を使用
+      } else {
+        article = await blogTool.generateArticle(category);
+      }
       
       // WordPress投稿
       const result = await blogTool.postToWordPress(article);
@@ -1498,11 +1502,12 @@ exports.weeklyBatchScheduler = functions
       for (const plan of weeklyPlan) {
         console.log(`📝 ${plan.category}: ${plan.count}記事生成中...`);
         
+        // === 修正箇所2: weeklyBatchScheduler 内 ===
         for (let i = 0; i < plan.count; i++) {
           try {
             let article;
-            if (plan.category === 'lifestyle') {  // adult → lifestyle に変更
-              article = await generateMatureLifestyleArticle(blogTool, 'moderate');
+            if (plan.category === 'selfhelp') {  
+              article = await generateSimpleHTMLRelationshipArticle(blogTool, 'general');  // 新しい関数を使用
             } else {
               article = await blogTool.generateArticle(plan.category);
             }
@@ -1593,13 +1598,14 @@ exports.eventBasedScheduler = functions
         const blogTool = new BlogAutomationTool();
         const results = [];
         
+        // === 修正箇所3: eventBasedScheduler 内 ===
         for (let i = 0; i < config.count; i++) {
           const category = config.categories[i % config.categories.length];
           
           try {
             let article;
-            if (category === 'lifestyle') {  // adult → lifestyle に変更
-              article = await generateMatureLifestyleArticle(blogTool, 'moderate');
+            if (category === 'selfhelp') {  
+              article = await generateSimpleHTMLRelationshipArticle(blogTool, 'general');  // 新しい関数を使用
             } else {
               article = await blogTool.generateArticle(category);
             }
@@ -1650,10 +1656,11 @@ exports.eventBasedScheduler = functions
   });
 
 // 時間帯別カテゴリ選択ロジック（ヘルパー関数）
+// === 修正箇所4: selectCategoryByTime 関数内 ===
 function selectCategoryByTime(hour, dayOfWeek) {
   // 深夜・早朝 (0-6時)
   if (hour >= 0 && hour < 6) {
-    return Math.random() < 0.3 ? 'selfhelp' : 'anime';  // lifestyle → selfhelp
+    return Math.random() < 0.3 ? 'selfhelp' : 'anime';  
   }
   
   // 朝 (6-9時)
@@ -1683,9 +1690,9 @@ function selectCategoryByTime(hour, dayOfWeek) {
   
   // 夜 (21-24時)
   if (hour >= 21 && hour < 24) {
-    // 土日は lifestyle 確率を上げる
-    const lifestyleProbability = (dayOfWeek === 0 || dayOfWeek === 6) ? 0.4 : 0.2;
-    if (Math.random() < lifestyleProbability) return 'lifestyle';  // adult → lifestyle
+    // 土日は selfhelp 確率を上げる
+    const selfhelpProbability = (dayOfWeek === 0 || dayOfWeek === 6) ? 0.4 : 0.2;
+    if (Math.random() < selfhelpProbability) return 'selfhelp';  
     return Math.random() < 0.6 ? 'anime' : 'game';
   }
   
