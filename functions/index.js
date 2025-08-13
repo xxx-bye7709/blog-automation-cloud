@@ -957,52 +957,53 @@ exports.batchGenerateSEOPosts = functions
     });
   });
 
-// システムメトリクス取得（SEO統計付き）
+// システムメトリクス取得API（ダッシュボード用）
 exports.getSystemMetrics = functions
   .region('asia-northeast1')
-  .runWith({ timeoutSeconds: 60, memory: '256MB' })
+  .runWith({ timeoutSeconds: 60 })
   .https.onRequest(async (req, res) => {
-    return cors(req, res, async () => {
-      try {
-        const metrics = {
-          status: 'operational',
-          functions: {
-            total: 14,
-            categories: 8,
-            seoFunctions: 3,
-            utilityFunctions: 3
-          },
-          capabilities: {
-            articleGeneration: true,
-            seoOptimization: true,
-            imageGeneration: true,
-            xmlrpcUpload: true,
-            batchProcessing: true
-          },
-          seoFeatures: {
-            keywordOptimization: true,
-            externalLinks: true,
-            internalLinks: true,
-            metaDescription: true,
-            firstParagraphKeyword: true,
-            keywordDensity: true
-          },
-          performance: {
-            averageGenerationTime: '25-45 seconds',
-            maxBatchSize: 10,
-            successRate: '95%+'
-          },
-          timestamp: new Date().toISOString()
-        };
-        
-        res.json(metrics);
-        
-      } catch (error) {
-        console.error('Metrics error:', error);
-        res.status(500).json({ 
-          success: false, 
-          error: error.message
-        });
-      }
-    });
+    // CORS対応
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    try {
+      // テスト用のダミーデータ
+      const metrics = {
+        todayCount: 3,
+        monthCount: 45,
+        totalCount: 279,
+        successCount: 275,
+        failedCount: 4,
+        successRate: 98,
+        systemStatus: 'online',
+        lastPost: {
+          title: '【2025/8/13】エンターテインメントの最新情報まとめ',
+          postId: '279',
+          createdAt: new Date().toISOString()
+        },
+        serverTime: new Date().toISOString(),
+        targets: {
+          daily: 20,
+          monthly: 500
+        }
+      };
+      
+      res.status(200).json({
+        success: true,
+        data: metrics
+      });
+      
+    } catch (error) {
+      console.error('Error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
   });
