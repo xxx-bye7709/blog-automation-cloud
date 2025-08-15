@@ -1144,8 +1144,8 @@ exports.triggerScheduledPost = functions.https.onRequest(async (req, res) => {
   try {
     console.log('triggerScheduledPost: 手動実行開始');
     
-    // ScheduleManagerの初期化
-    const ScheduleManager = require('./lib/schedule-manager');
+    // ScheduleManagerの初期化（パスを修正）
+    const { ScheduleManager } = require('./lib/schedule-manager');
     const scheduleManager = new ScheduleManager();
     
     // スケジュール取得
@@ -1164,8 +1164,8 @@ exports.triggerScheduledPost = functions.https.onRequest(async (req, res) => {
     const category = await scheduleManager.getNextCategory();
     console.log('選択されたカテゴリー:', category);
     
-    // BlogAutomationToolの初期化
-    const BlogAutomationTool = require('./lib/blog-tool');
+    // BlogAutomationToolの初期化（パスも確認）
+    const { BlogAutomationTool } = require('./lib/blog-tool');
     const blogTool = new BlogAutomationTool();
     
     // 記事生成
