@@ -1,5 +1,10 @@
 // functions/index.js - Firebase Functions v4形式（CORS対応版）
 const functions = require('firebase-functions');
+const admin = require('firebase-admin');
+const cors = require('cors')({ origin: true });
+
+// Firebase Admin初期化（重要！）
+admin.initializeApp();
 
 // Firebase configから環境変数に設定
 if (functions.config().openai && functions.config().openai.api_key) {
@@ -9,19 +14,6 @@ if (functions.config().openai && functions.config().openai.api_key) {
   console.log('⚠️ OpenAI API key not found in Firebase config, using .env file');
 }
 
-
-
-// CORSの設定（重要！）
-const cors = require('cors')({
-  origin: [
-    'http://localhost:3000',
-    'https://blog-dashboard-self.vercel.app',
-    'https://blog-dashboard-aev69jt0d-rukas-projects-59011c15.vercel.app',
-    true  // 開発時は全て許可
-  ],
-  credentials: true
-});
-
 // .envファイルは自動的に読み込まれる（Firebase Functions v4.8.0以降）
 
 // 遅延読み込み用の変数
@@ -29,6 +21,7 @@ let BlogAutomationTool;
 let ImageGenerator;
 let PerformanceSystem;
 let WordPressMediaManager;
+let ScheduleManager;
 
 // 初期化関数
 function loadModules() {
@@ -43,6 +36,9 @@ function loadModules() {
   }
   if (!WordPressMediaManager) {
     WordPressMediaManager = require('./lib/wordpress-media-manager');
+  }
+  if (!ScheduleManager) {
+    ScheduleManager = require('./lib/schedule-manager');
   }
 }
 
