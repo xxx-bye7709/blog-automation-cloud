@@ -37,9 +37,6 @@ function loadModules() {
   if (!WordPressMediaManager) {
     WordPressMediaManager = require('./lib/wordpress-media-manager');
   }
-  if (!ScheduleManager) {
-    ScheduleManager = require('./lib/schedule-manager');
-  }
 }
 
 // グローバルインスタンス
