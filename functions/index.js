@@ -1018,10 +1018,10 @@ exports.getSystemMetrics = functions
 // 既存のindex.jsの最後に以下を追加してください
 
 // ScheduleManagerクラスをインポート（グローバルレベル）
-const ScheduleManager = require('./lib/schedule-manager');
+// const ScheduleManager = require('./lib/schedule-manager');
 
 // ========================
-// スケジュール管理機能
+// スケジュール管理機能（修正版）
 // ========================
 
 /**
@@ -1041,8 +1041,9 @@ exports.setSchedule = functions
     }
 
     try {
-      // 関数内でScheduleManagerインスタンスを作成
-      const scheduleManager = new ScheduleManager(admin);
+      // ScheduleManagerを直接require（loadModulesを使わない）
+      const ScheduleManagerClass = require('./lib/schedule-manager');
+      const scheduleManager = new ScheduleManagerClass(admin);
       
       const config = req.body;
       const result = await scheduleManager.setSchedule(config);
@@ -1077,8 +1078,9 @@ exports.getSchedule = functions
     }
 
     try {
-      // 関数内でScheduleManagerインスタンスを作成
-      const scheduleManager = new ScheduleManager(admin);
+      // ScheduleManagerを直接require
+      const ScheduleManagerClass = require('./lib/schedule-manager');
+      const scheduleManager = new ScheduleManagerClass(admin);
       
       const schedule = await scheduleManager.getSchedule();
       
@@ -1112,8 +1114,8 @@ exports.toggleSchedule = functions
     }
 
     try {
-      // 関数内でScheduleManagerインスタンスを作成
-      const scheduleManager = new ScheduleManager(admin);
+      const ScheduleManagerClass = require('./lib/schedule-manager');
+      const scheduleManager = new ScheduleManagerClass(admin);
       
       const { enabled } = req.body;
       const result = await scheduleManager.toggleSchedule(enabled);
@@ -1132,19 +1134,85 @@ exports.toggleSchedule = functions
   });
 
 /**
+ * 手動実行用エンドポイント
+ */
+exports.triggerScheduledPost = functions
+  .region('asia-northeast1')
+  .https.onRequest(async (req, res) => {
+    // CORS設定
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    try {
+      const ScheduleManagerClass = require('./lib/schedule-manager');
+      const scheduleManager = new ScheduleManagerClass(admin);
+      
+      // 実行可能かチェック
+      const checkResult = await scheduleManager.canExecute();
+      if (!checkResult.canExecute) {
+        res.json({
+          success: false,
+          message: checkResult.reason
+        });
+        return;
+      }
+
+      // 次のカテゴリーを取得
+      const category = await scheduleManager.getNextCategory();
+      
+      // 既存の記事生成関数を使用
+      loadModules();  // BlogAutomationToolをロード
+      const blogTool = new BlogAutomationTool();
+      
+      // generateAndPublishメソッドが存在しない場合は、通常の生成方法を使用
+      let result;
+      const article = await blogTool.generateArticle(category);
+      result = await blogTool.postToWordPress(article);
+      
+      if (result && result.success !== false) {
+        await scheduleManager.incrementTodayPostCount();
+        
+        res.json({
+          success: true,
+          postId: result.postId,
+          category: category,
+          title: result.title,
+          url: result.url
+        });
+      } else {
+        res.json({
+          success: false,
+          error: result?.error || '記事生成に失敗しました'
+        });
+      }
+    } catch (error) {
+      console.error('手動実行エラー:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+/**
  * スケジュール実行（1時間ごと）
- * Cloud Schedulerから呼び出される
  */
 exports.scheduledHourlyPost = functions
   .region('asia-northeast1')
-  .pubsub.schedule('0 * * * *') // 毎時0分に実行
+  .pubsub.schedule('0 * * * *')
   .timeZone('Asia/Tokyo')
   .onRun(async (context) => {
     console.log('定期実行開始:', new Date().toISOString());
     
     try {
-      // 関数内でScheduleManagerインスタンスを作成
-      const scheduleManager = new ScheduleManager(admin);
+      const ScheduleManagerClass = require('./lib/schedule-manager');
+      const scheduleManager = new ScheduleManagerClass(admin);
       
       // 実行可能かチェック
       const checkResult = await scheduleManager.canExecute();
@@ -1175,7 +1243,7 @@ exports.scheduledHourlyPost = functions
           shouldExecute = hour % 6 === 0;
           break;
         case 'daily':
-          shouldExecute = hour === 9; // 朝9時のみ
+          shouldExecute = hour === 9;
           break;
       }
 
@@ -1188,16 +1256,14 @@ exports.scheduledHourlyPost = functions
       const category = await scheduleManager.getNextCategory();
       console.log('投稿カテゴリー:', category);
 
-      // 記事生成関数を呼び出し
-      const BlogAutomationTool = require('./lib/blog-tool');
+      // 記事生成
+      loadModules();
       const blogTool = new BlogAutomationTool();
+      const article = await blogTool.generateArticle(category);
+      const result = await blogTool.postToWordPress(article);
       
-      const result = await blogTool.generateAndPublish(category);
-      
-      if (result.success) {
-        // 投稿数をインクリメント
+      if (result && result.success !== false) {
         await scheduleManager.incrementTodayPostCount();
-        
         console.log('定期投稿成功:', {
           postId: result.postId,
           category: category,
@@ -1217,14 +1283,14 @@ exports.scheduledHourlyPost = functions
  */
 exports.scheduledDailyReset = functions
   .region('asia-northeast1')
-  .pubsub.schedule('0 0 * * *') // 毎日0時に実行
+  .pubsub.schedule('0 0 * * *')
   .timeZone('Asia/Tokyo')
   .onRun(async (context) => {
     console.log('日次リセット開始:', new Date().toISOString());
     
     try {
-      // 関数内でScheduleManagerインスタンスを作成
-      const scheduleManager = new ScheduleManager(admin);
+      const ScheduleManagerClass = require('./lib/schedule-manager');
+      const scheduleManager = new ScheduleManagerClass(admin);
       
       await scheduleManager.resetDailyCount();
       console.log('日次リセット完了');
@@ -1303,3 +1369,4 @@ exports.triggerScheduledPost = functions
       });
     }
   });
+
