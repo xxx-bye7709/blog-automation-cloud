@@ -3,7 +3,7 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const cors = require('cors')({ origin: true });
 
-// Firebase Admin初期化（重要！）
+// Firebase Admin初期化（重要！グローバルスコープで初期化）
 admin.initializeApp();
 
 // Firebase configから環境変数に設定
@@ -21,7 +21,6 @@ let BlogAutomationTool;
 let ImageGenerator;
 let PerformanceSystem;
 let WordPressMediaManager;
-//let ScheduleManager;削除
 
 // 初期化関数
 function loadModules() {
