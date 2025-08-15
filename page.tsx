@@ -419,34 +419,41 @@ export default function Home() {
               </div>
             </div>
 
-            {/* スケジュール設定 */}
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700 mt-6">
-              <h2 className="text-xl font-bold mb-4 flex items-center">
-                <Calendar className="w-5 h-5 mr-2" />
-                スケジュール設定
-              </h2>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 bg-gray-700/50 rounded-lg">
-                  <div>
-                    <div className="font-medium">定期投稿</div>
-                    <div className="text-sm text-gray-400">毎時30分に自動投稿</div>
-                  </div>
-                  <div className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">
-                    有効
-                  </div>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-gray-700/50 rounded-lg">
-                  <div>
-                    <div className="font-medium">日次レポート</div>
-                    <div className="text-sm text-gray-400">毎朝9時に送信</div>
-                  </div>
-                  <div className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">
-                    有効
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+           // page.tsx の「スケジュール設定」セクションを以下に置き換え
+
+{/* スケジュール設定 */}
+<div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700 mt-6">
+  <h2 className="text-xl font-bold mb-4 flex items-center">
+    <Calendar className="w-5 h-5 mr-2" />
+    スケジュール設定
+  </h2>
+  <div className="space-y-3">
+    <div className="flex items-center justify-between p-3 bg-gray-700/50 rounded-lg">
+      <div>
+        <div className="font-medium">自動投稿スケジューラー</div>
+        <div className="text-sm text-gray-400">カテゴリーローテーションで自動投稿</div>
+      </div>
+      <Link 
+        href="/schedule"
+        className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:from-blue-700 hover:to-cyan-700 transition-all flex items-center gap-2"
+      >
+        <Settings className="w-4 h-4" />
+        設定画面へ
+      </Link>
+    </div>
+    
+    {/* スケジュールステータス表示（オプション） */}
+    <div className="p-3 bg-gradient-to-r from-green-900/20 to-blue-900/20 border border-green-700/30 rounded-lg">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+          <span className="text-sm text-gray-300">スケジュール稼働中</span>
+        </div>
+        <span className="text-xs text-gray-500">次回投稿: 1時間後</span>
+      </div>
+    </div>
+  </div>
+</div>
 
           {/* 最近の投稿 */}
           <div className="lg:col-span-1">
