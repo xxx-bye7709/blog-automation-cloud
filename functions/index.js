@@ -21,7 +21,7 @@ let BlogAutomationTool;
 let ImageGenerator;
 let PerformanceSystem;
 let WordPressMediaManager;
-let ScheduleManager;
+//let ScheduleManager;削除
 
 // 初期化関数
 function loadModules() {
