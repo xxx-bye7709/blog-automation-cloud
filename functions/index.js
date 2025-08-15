@@ -1018,11 +1018,11 @@ exports.getSystemMetrics = functions
     }
   });
 
-// functions/index.js に追加する関数
+// functions/index.js に追加する関数（修正版）
 // 既存のindex.jsの最後に以下を追加してください
 
+// ScheduleManagerクラスをインポート（グローバルレベル）
 const ScheduleManager = require('./lib/schedule-manager');
-const scheduleManager = new ScheduleManager();
 
 // ========================
 // スケジュール管理機能
@@ -1045,6 +1045,9 @@ exports.setSchedule = functions
     }
 
     try {
+      // 関数内でScheduleManagerインスタンスを作成
+      const scheduleManager = new ScheduleManager(admin);
+      
       const config = req.body;
       const result = await scheduleManager.setSchedule(config);
       
@@ -1078,6 +1081,9 @@ exports.getSchedule = functions
     }
 
     try {
+      // 関数内でScheduleManagerインスタンスを作成
+      const scheduleManager = new ScheduleManager(admin);
+      
       const schedule = await scheduleManager.getSchedule();
       
       res.json({
@@ -1110,6 +1116,9 @@ exports.toggleSchedule = functions
     }
 
     try {
+      // 関数内でScheduleManagerインスタンスを作成
+      const scheduleManager = new ScheduleManager(admin);
+      
       const { enabled } = req.body;
       const result = await scheduleManager.toggleSchedule(enabled);
       
@@ -1138,6 +1147,9 @@ exports.scheduledHourlyPost = functions
     console.log('定期実行開始:', new Date().toISOString());
     
     try {
+      // 関数内でScheduleManagerインスタンスを作成
+      const scheduleManager = new ScheduleManager(admin);
+      
       // 実行可能かチェック
       const checkResult = await scheduleManager.canExecute();
       if (!checkResult.canExecute) {
@@ -1215,6 +1227,9 @@ exports.scheduledDailyReset = functions
     console.log('日次リセット開始:', new Date().toISOString());
     
     try {
+      // 関数内でScheduleManagerインスタンスを作成
+      const scheduleManager = new ScheduleManager(admin);
+      
       await scheduleManager.resetDailyCount();
       console.log('日次リセット完了');
       return null;
@@ -1224,12 +1239,8 @@ exports.scheduledDailyReset = functions
     }
   });
 
-// ========================
-// 手動実行用エンドポイント
-// ========================
-
 /**
- * スケジュール投稿を手動実行（テスト用）
+ * 手動実行用エンドポイント（テスト用）
  */
 exports.triggerScheduledPost = functions
   .region('asia-northeast1')
@@ -1245,6 +1256,9 @@ exports.triggerScheduledPost = functions
     }
 
     try {
+      // 関数内でScheduleManagerインスタンスを作成
+      const scheduleManager = new ScheduleManager(admin);
+      
       // 実行可能かチェック
       const checkResult = await scheduleManager.canExecute();
       if (!checkResult.canExecute) {
@@ -1258,22 +1272,33 @@ exports.triggerScheduledPost = functions
       // 次のカテゴリーを取得
       const category = await scheduleManager.getNextCategory();
       
-      // 記事生成
+      // 記事生成（既存の生成関数を呼び出す）
+      const functionName = category === 'random' 
+        ? 'generateRandomArticle' 
+        : `generate${category.charAt(0).toUpperCase() + category.slice(1)}Article`;
+      
+      // 既存の記事生成ロジックを使用
       const BlogAutomationTool = require('./lib/blog-tool');
       const blogTool = new BlogAutomationTool();
+      
       const result = await blogTool.generateAndPublish(category);
       
       if (result.success) {
         await scheduleManager.incrementTodayPostCount();
+        
+        res.json({
+          success: true,
+          postId: result.postId,
+          category: category,
+          title: result.title,
+          url: result.url
+        });
+      } else {
+        res.json({
+          success: false,
+          error: result.error || '記事生成に失敗しました'
+        });
       }
-
-      res.json({
-        success: result.success,
-        postId: result.postId,
-        category: category,
-        title: result.title,
-        url: result.url
-      });
     } catch (error) {
       console.error('手動実行エラー:', error);
       res.status(500).json({
