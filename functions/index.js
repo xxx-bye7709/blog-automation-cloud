@@ -1,6 +1,16 @@
 // functions/index.js - Firebase Functions v4形式（CORS対応版）
 const functions = require('firebase-functions');
 
+// Firebase configから環境変数に設定
+if (functions.config().openai && functions.config().openai.api_key) {
+  process.env.OPENAI_API_KEY = functions.config().openai.api_key;
+  console.log('✅ OpenAI API key loaded from Firebase config');
+} else {
+  console.log('⚠️ OpenAI API key not found in Firebase config, using .env file');
+}
+
+
+
 // CORSの設定（重要！）
 const cors = require('cors')({
   origin: [
@@ -1001,6 +1011,271 @@ exports.getSystemMetrics = functions
       
     } catch (error) {
       console.error('Error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+// functions/index.js に追加する関数
+// 既存のindex.jsの最後に以下を追加してください
+
+const ScheduleManager = require('./lib/schedule-manager');
+const scheduleManager = new ScheduleManager();
+
+// ========================
+// スケジュール管理機能
+// ========================
+
+/**
+ * スケジュール設定を保存
+ */
+exports.setSchedule = functions
+  .region('asia-northeast1')
+  .https.onRequest(async (req, res) => {
+    // CORS設定
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    try {
+      const config = req.body;
+      const result = await scheduleManager.setSchedule(config);
+      
+      res.json({
+        success: true,
+        schedule: result.schedule
+      });
+    } catch (error) {
+      console.error('スケジュール設定エラー:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+/**
+ * スケジュール設定を取得
+ */
+exports.getSchedule = functions
+  .region('asia-northeast1')
+  .https.onRequest(async (req, res) => {
+    // CORS設定
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    try {
+      const schedule = await scheduleManager.getSchedule();
+      
+      res.json({
+        success: true,
+        schedule: schedule
+      });
+    } catch (error) {
+      console.error('スケジュール取得エラー:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+/**
+ * スケジュールの有効/無効を切り替え
+ */
+exports.toggleSchedule = functions
+  .region('asia-northeast1')
+  .https.onRequest(async (req, res) => {
+    // CORS設定
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    try {
+      const { enabled } = req.body;
+      const result = await scheduleManager.toggleSchedule(enabled);
+      
+      res.json({
+        success: true,
+        enabled: result.enabled
+      });
+    } catch (error) {
+      console.error('スケジュール切り替えエラー:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+/**
+ * スケジュール実行（1時間ごと）
+ * Cloud Schedulerから呼び出される
+ */
+exports.scheduledHourlyPost = functions
+  .region('asia-northeast1')
+  .pubsub.schedule('0 * * * *') // 毎時0分に実行
+  .timeZone('Asia/Tokyo')
+  .onRun(async (context) => {
+    console.log('定期実行開始:', new Date().toISOString());
+    
+    try {
+      // 実行可能かチェック
+      const checkResult = await scheduleManager.canExecute();
+      if (!checkResult.canExecute) {
+        console.log('実行スキップ:', checkResult.reason);
+        return null;
+      }
+
+      // スケジュール設定を取得
+      const schedule = await scheduleManager.getSchedule();
+      
+      // インターバルチェック
+      const now = new Date();
+      const hour = now.getHours();
+      
+      let shouldExecute = false;
+      switch (schedule.interval) {
+        case 'hourly':
+          shouldExecute = true;
+          break;
+        case 'every_2_hours':
+          shouldExecute = hour % 2 === 0;
+          break;
+        case 'every_3_hours':
+          shouldExecute = hour % 3 === 0;
+          break;
+        case 'every_6_hours':
+          shouldExecute = hour % 6 === 0;
+          break;
+        case 'daily':
+          shouldExecute = hour === 9; // 朝9時のみ
+          break;
+      }
+
+      if (!shouldExecute) {
+        console.log('インターバル外のためスキップ');
+        return null;
+      }
+
+      // 次のカテゴリーを取得
+      const category = await scheduleManager.getNextCategory();
+      console.log('投稿カテゴリー:', category);
+
+      // 記事生成関数を呼び出し
+      const BlogAutomationTool = require('./lib/blog-tool');
+      const blogTool = new BlogAutomationTool();
+      
+      const result = await blogTool.generateAndPublish(category);
+      
+      if (result.success) {
+        // 投稿数をインクリメント
+        await scheduleManager.incrementTodayPostCount();
+        
+        console.log('定期投稿成功:', {
+          postId: result.postId,
+          category: category,
+          title: result.title
+        });
+      }
+
+      return result;
+    } catch (error) {
+      console.error('定期実行エラー:', error);
+      return null;
+    }
+  });
+
+/**
+ * 日次リセット（毎日0時）
+ */
+exports.scheduledDailyReset = functions
+  .region('asia-northeast1')
+  .pubsub.schedule('0 0 * * *') // 毎日0時に実行
+  .timeZone('Asia/Tokyo')
+  .onRun(async (context) => {
+    console.log('日次リセット開始:', new Date().toISOString());
+    
+    try {
+      await scheduleManager.resetDailyCount();
+      console.log('日次リセット完了');
+      return null;
+    } catch (error) {
+      console.error('日次リセットエラー:', error);
+      return null;
+    }
+  });
+
+// ========================
+// 手動実行用エンドポイント
+// ========================
+
+/**
+ * スケジュール投稿を手動実行（テスト用）
+ */
+exports.triggerScheduledPost = functions
+  .region('asia-northeast1')
+  .https.onRequest(async (req, res) => {
+    // CORS設定
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    try {
+      // 実行可能かチェック
+      const checkResult = await scheduleManager.canExecute();
+      if (!checkResult.canExecute) {
+        res.json({
+          success: false,
+          message: checkResult.reason
+        });
+        return;
+      }
+
+      // 次のカテゴリーを取得
+      const category = await scheduleManager.getNextCategory();
+      
+      // 記事生成
+      const BlogAutomationTool = require('./lib/blog-tool');
+      const blogTool = new BlogAutomationTool();
+      const result = await blogTool.generateAndPublish(category);
+      
+      if (result.success) {
+        await scheduleManager.incrementTodayPostCount();
+      }
+
+      res.json({
+        success: result.success,
+        postId: result.postId,
+        category: category,
+        title: result.title,
+        url: result.url
+      });
+    } catch (error) {
+      console.error('手動実行エラー:', error);
       res.status(500).json({
         success: false,
         error: error.message
