@@ -1129,72 +1129,76 @@ exports.toggleSchedule = functions
     }
   });
 
-/**
- * 手動実行用エンドポイント
- */
-exports.triggerScheduledPost = functions
-  .region('asia-northeast1')
-  .https.onRequest(async (req, res) => {
-    // CORS設定
-    res.set('Access-Control-Allow-Origin', '*');
-    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.set('Access-Control-Allow-Headers', 'Content-Type');
+// スケジュール手動実行エンドポイント
+exports.triggerScheduledPost = functions.https.onRequest(async (req, res) => {
+  // CORS設定
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type');
+  
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+
+  try {
+    console.log('triggerScheduledPost: 手動実行開始');
     
-    if (req.method === 'OPTIONS') {
-      res.status(204).send('');
-      return;
-    }
-
-    try {
-      const ScheduleManagerClass = require('./lib/schedule-manager');
-      const scheduleManager = new ScheduleManagerClass(admin);
-      
-      // 実行可能かチェック
-      const checkResult = await scheduleManager.canExecute();
-      if (!checkResult.canExecute) {
-        res.json({
-          success: false,
-          message: checkResult.reason
-        });
-        return;
-      }
-
-      // 次のカテゴリーを取得
-      const category = await scheduleManager.getNextCategory();
-      
-      // 既存の記事生成関数を使用
-      loadModules();  // BlogAutomationToolをロード
-      const blogTool = new BlogAutomationTool();
-      
-      // generateAndPublishメソッドが存在しない場合は、通常の生成方法を使用
-      let result;
-      const article = await blogTool.generateArticle(category);
-      result = await blogTool.postToWordPress(article);
-      
-      if (result && result.success !== false) {
-        await scheduleManager.incrementTodayPostCount();
-        
-        res.json({
-          success: true,
-          postId: result.postId,
-          category: category,
-          title: result.title,
-          url: result.url
-        });
-      } else {
-        res.json({
-          success: false,
-          error: result?.error || '記事生成に失敗しました'
-        });
-      }
-    } catch (error) {
-      console.error('手動実行エラー:', error);
-      res.status(500).json({
+    // ScheduleManagerの初期化
+    const ScheduleManager = require('./lib/schedule-manager');
+    const scheduleManager = new ScheduleManager();
+    
+    // スケジュール取得
+    const schedule = await scheduleManager.getSchedule();
+    console.log('現在のスケジュール:', JSON.stringify(schedule));
+    
+    if (!schedule || !schedule.enabled) {
+      console.log('スケジュールが無効です');
+      return res.status(200).json({
         success: false,
-        error: error.message
+        message: 'スケジュールが無効になっています'
       });
     }
-  });
+    
+    // カテゴリー選択
+    const category = await scheduleManager.getNextCategory();
+    console.log('選択されたカテゴリー:', category);
+    
+    // BlogAutomationToolの初期化
+    const BlogAutomationTool = require('./lib/blog-tool');
+    const blogTool = new BlogAutomationTool();
+    
+    // 記事生成
+    console.log(`${category}記事を生成中...`);
+    const result = await blogTool.generateAndPublish(category);
+    console.log('記事生成結果:', JSON.stringify(result));
+    
+    if (result.success) {
+      // 投稿記録を更新
+      await scheduleManager.recordPost();
+      
+      return res.status(200).json({
+        success: true,
+        message: '記事が正常に投稿されました',
+        postId: result.postId,
+        title: result.title,
+        category: category,
+        url: result.url
+      });
+    } else {
+      throw new Error(result.error || '記事生成に失敗しました');
+    }
+    
+  } catch (error) {
+    console.error('triggerScheduledPost エラー詳細:', error);
+    console.error('エラースタック:', error.stack);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'スケジュール実行中にエラーが発生しました',
+      details: error.toString()
+    });
+  }
+});
 
 /**
  * スケジュール実行（1時間ごと）
