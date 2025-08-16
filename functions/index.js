@@ -1410,8 +1410,7 @@ exports.quickTest = functions.runWith({ timeoutSeconds: 60 }).https.onRequest(as
 /**
  * DMM商品連携記事生成
  */
-// index.js の generateArticleWithProducts を以下に置き換える
-// ※ index.jsの先頭で const functions = require('firebase-functions'); が定義されていることを確認
+// index.js の generateArticleWithProducts を以下に完全に置き換える
 
 exports.generateArticleWithProducts = functions
   .region('asia-northeast1')
@@ -1426,8 +1425,8 @@ exports.generateArticleWithProducts = functions
         
         // パラメータ取得
         const {
-          keyword = 'アニメ',
-          category = 'anime',
+          keyword = 'DVD',
+          category = 'entertainment',
           limit = 5,
           templateId = 'product_review',
           postToWordPress = false
@@ -1439,50 +1438,93 @@ exports.generateArticleWithProducts = functions
         const BlogAutomationTool = require('./lib/blog-tool');
         const axios = require('axios');
         
-        // 1. DMM API検索（既存のsearchProducts関数と同じロジック）
-        console.log('Searching DMM products...');
+        // 1. DMM API直接呼び出し
+        console.log('Searching DMM products directly...');
         let products = [];
         
         try {
-          const searchUrl = `https://asia-northeast1-blog-automation-system.cloudfunctions.net/searchProducts`;
-          const searchResponse = await axios.get(searchUrl, {
-            params: { keyword, limit },
+          const dmmParams = {
+            api_id: process.env.DMM_API_ID,
+            affiliate_id: process.env.DMM_AFFILIATE_ID,
+            site: 'FANZA',
+            service: 'digital',
+            floor: 'videoa',
+            keyword: keyword,
+            hits: parseInt(limit) || 5,
+            sort: 'rank',
+            output: 'json'
+          };
+          
+          console.log('DMM API params:', { 
+            ...dmmParams, 
+            api_id: dmmParams.api_id ? 'SET' : 'NOT SET' 
+          });
+          
+          const dmmResponse = await axios.get('https://api.dmm.com/affiliate/v3/ItemList', {
+            params: dmmParams,
             timeout: 10000
           });
           
-          if (searchResponse.data?.success && searchResponse.data?.items) {
-            products = searchResponse.data.items;
-            console.log(`Found ${products.length} products from DMM`);
+          console.log('DMM Response status:', dmmResponse.status);
+          
+          if (dmmResponse.data?.result?.items) {
+            const items = dmmResponse.data.result.items;
+            console.log(`Found ${items.length} items from DMM`);
+            
+            // DMM商品データを整形
+            products = items.slice(0, parseInt(limit)).map(item => ({
+              title: item.title,
+              price: item.prices?.price || item.price || '価格不明',
+              imageUrl: item.imageURL?.large || item.imageURL?.small,
+              affiliateUrl: item.affiliateURL || item.URL,
+              description: item.iteminfo?.series?.[0]?.name || 
+                          item.iteminfo?.label?.[0]?.name || '',
+              maker: item.iteminfo?.maker?.[0]?.name || '',
+              genre: item.iteminfo?.genre?.[0]?.name || '',
+              actress: item.iteminfo?.actress?.[0]?.name || '',
+              rating: item.review?.average || 0
+            }));
+            
+            console.log(`Formatted ${products.length} products`);
           }
         } catch (dmmError) {
-          console.log('DMM search failed, continuing without products:', dmmError.message);
+          console.error('DMM API error:', dmmError.message);
+          if (dmmError.response) {
+            console.error('DMM error response:', dmmError.response.data);
+          }
         }
         
         // 2. 記事生成
         console.log('Generating article...');
         const blogTool = new BlogAutomationTool();
         
-        let articlePrompt = `${keyword}に関する魅力的な記事を作成してください。`;
-        
-        // 商品がある場合はプロンプトに追加
+        let articlePrompt;
         if (products.length > 0) {
           articlePrompt = `
-以下の商品情報を基に、${keyword}に関する魅力的なレビュー記事を作成してください。
+以下のDVD/動画商品を基に、魅力的なレビュー記事を作成してください。
 
 【商品リスト】
 ${products.map((p, i) => `
 ${i + 1}. ${p.title}
 価格: ${p.price}
-${p.description || ''}
+${p.description ? `説明: ${p.description}` : ''}
 ${p.maker ? `メーカー: ${p.maker}` : ''}
 ${p.genre ? `ジャンル: ${p.genre}` : ''}
+${p.actress ? `出演: ${p.actress}` : ''}
+${p.rating > 0 ? `評価: ⭐${p.rating}/5` : ''}
 `).join('\n')}
 
 【記事の要件】
-- 各商品の魅力を具体的に説明
-- SEOを意識したキーワードの使用
-- 読者の購買意欲を高める文章
+- 各商品の特徴や魅力を詳しく説明
+- 購入を検討している読者に役立つ情報を提供
+- SEOを意識したキーワード「${keyword}」の適切な使用
 - カテゴリ: ${category}
+`;
+        } else {
+          articlePrompt = `
+${keyword}に関する魅力的な紹介記事を作成してください。
+最新のトレンドや注目すべきポイントを含めて、読者の興味を引く内容にしてください。
+カテゴリ: ${category}
 `;
         }
         
@@ -1498,20 +1540,41 @@ ${p.genre ? `ジャンル: ${p.genre}` : ''}
         if (products.length > 0) {
           const productSection = `
 <h2>おすすめ商品</h2>
-<div class="product-list">
-${products.map(p => `
-<div class="product-item" style="margin-bottom: 30px; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-  ${p.imageUrl ? `<img src="${p.imageUrl}" alt="${p.title}" style="max-width: 200px; float: left; margin-right: 20px;">` : ''}
-  <h3>${p.title}</h3>
-  <p class="price" style="font-size: 1.2em; color: #ff6b6b; font-weight: bold;">${p.price}</p>
-  ${p.description ? `<p>${p.description}</p>` : ''}
-  ${p.maker ? `<p><strong>メーカー:</strong> ${p.maker}</p>` : ''}
-  ${p.genre ? `<p><strong>ジャンル:</strong> ${p.genre}</p>` : ''}
-  ${p.rating && p.rating > 0 ? `<p><strong>評価:</strong> ⭐${p.rating}</p>` : ''}
-  <p><a href="${p.affiliateUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">詳細を見る</a></p>
-  <div style="clear: both;"></div>
+<div class="product-list" style="margin-top: 40px;">
+${products.map((p, index) => `
+<div class="product-item" style="margin-bottom: 30px; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: #f9f9f9;">
+  <div style="display: flex; gap: 20px;">
+    ${p.imageUrl ? `
+    <div style="flex-shrink: 0;">
+      <img src="${p.imageUrl}" alt="${p.title}" style="max-width: 200px; border-radius: 4px;">
+    </div>
+    ` : ''}
+    <div style="flex-grow: 1;">
+      <h3 style="margin-top: 0; color: #333;">${index + 1}. ${p.title}</h3>
+      <p class="price" style="font-size: 1.3em; color: #ff6b6b; font-weight: bold; margin: 10px 0;">
+        💰 ${p.price}
+      </p>
+      ${p.description ? `<p><strong>📝 説明:</strong> ${p.description}</p>` : ''}
+      ${p.maker ? `<p><strong>🏢 メーカー:</strong> ${p.maker}</p>` : ''}
+      ${p.genre ? `<p><strong>📂 ジャンル:</strong> ${p.genre}</p>` : ''}
+      ${p.actress ? `<p><strong>👤 出演:</strong> ${p.actress}</p>` : ''}
+      ${p.rating > 0 ? `<p><strong>⭐ 評価:</strong> ${p.rating}/5</p>` : ''}
+      <p style="margin-top: 20px;">
+        <a href="${p.affiliateUrl}" target="_blank" rel="noopener noreferrer" 
+           style="display: inline-block; padding: 12px 30px; background-color: #4CAF50; 
+                  color: white; text-decoration: none; border-radius: 5px; 
+                  font-weight: bold; font-size: 1.1em;">
+          🛒 詳細を見る
+        </a>
+      </p>
+    </div>
+  </div>
 </div>
 `).join('')}
+</div>
+
+<div style="margin-top: 30px; padding: 20px; background: #f0f8ff; border-left: 4px solid #4CAF50;">
+  <p style="margin: 0;"><strong>💡 ご注意:</strong> 価格や在庫状況は変動する場合があります。最新情報は各商品ページでご確認ください。</p>
 </div>
 `;
           enhancedContent = enhancedContent + '\n\n' + productSection;
@@ -1523,41 +1586,54 @@ ${products.map(p => `
           console.log('Posting to WordPress...');
           
           try {
-            const wordpress = require('wordpress');
-            const client = wordpress.createClient({
-              url: process.env.WP_URL,
-              username: process.env.WP_USERNAME,
-              password: process.env.WP_PASSWORD
-            });
+            // wordpress モジュールがインストールされているか確認
+            let wordpress;
+            try {
+              wordpress = require('wordpress');
+            } catch (moduleError) {
+              console.error('WordPress module not found. Please install: npm install wordpress');
+              postResult = {
+                success: false,
+                error: 'WordPress module not installed. Run: npm install wordpress'
+              };
+            }
             
-            const postData = {
-              title: articleData.title,
-              content: enhancedContent,
-              status: 'publish',
-              categories: [category],
-              tags: [keyword]
-            };
-            
-            postResult = await new Promise((resolve, reject) => {
-              client.newPost(postData, (error, id) => {
-                if (error) {
-                  console.error('WordPress posting error:', error);
-                  reject(error);
-                } else {
-                  console.log('Successfully posted to WordPress. Post ID:', id);
-                  resolve({
-                    success: true,
-                    postId: id,
-                    url: `${process.env.WP_URL}/?p=${id}`
-                  });
-                }
+            if (wordpress) {
+              const client = wordpress.createClient({
+                url: process.env.WP_URL,
+                username: process.env.WP_USERNAME,
+                password: process.env.WP_PASSWORD
               });
-            });
+              
+              const postData = {
+                title: articleData.title,
+                content: enhancedContent,
+                status: 'publish',
+                categories: [category],
+                tags: [keyword]
+              };
+              
+              postResult = await new Promise((resolve, reject) => {
+                client.newPost(postData, (error, id) => {
+                  if (error) {
+                    console.error('WordPress posting error:', error);
+                    reject(error);
+                  } else {
+                    console.log('Successfully posted to WordPress. Post ID:', id);
+                    resolve({
+                      success: true,
+                      postId: id,
+                      url: `${process.env.WP_URL}/?p=${id}`
+                    });
+                  }
+                });
+              });
+            }
           } catch (wpError) {
             console.error('WordPress posting failed:', wpError);
             postResult = {
               success: false,
-              error: wpError.message
+              error: wpError.message || wpError.toString()
             };
           }
         }
@@ -1573,11 +1649,14 @@ ${products.map(p => `
           },
           products: products,
           productCount: products.length,
-          wordpressPost: postResult
+          wordpressPost: postResult,
+          message: products.length > 0 
+            ? `Successfully generated article with ${products.length} products` 
+            : 'Article generated without products (no products found for keyword)'
         };
         
         console.log('=== Completed generateArticleWithProducts ===');
-        console.log(`Generated article with ${products.length} products`);
+        console.log(`Result: ${response.message}`);
         
         res.status(200).json(response);
         
