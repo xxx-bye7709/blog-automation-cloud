@@ -1410,23 +1410,23 @@ exports.quickTest = functions.runWith({ timeoutSeconds: 60 }).https.onRequest(as
 /**
  * DMM商品連携記事生成
  */
-exports.generateArticleWithProducts = functions.region("asia-northeast1")
+exports.generateArticleWithProducts = functions
+  .region('asia-northeast1')
   .runWith({ timeoutSeconds: 540, memory: '2GB' })
   .https.onRequest(async (req, res) => {
     cors(req, res, async () => {
       try {
+        const BlogAutomationTool = require('./lib/blog-tool');
+        const DMMApi = require('./lib/dmm-api');
+        const dmmApi = new DMMApi();
+        
         const { 
           template = 'review', 
-          category = 'anime',
+          category = 'entertainment',
           keyword,
           includeProducts = true,
           productCount = 3
         } = req.body;
-
-        // DMM API初期化
-        const DMMApi = require('./lib/dmm-api');
-        const BlogAutomationTool = require('./lib/blog-tool');
-        const dmmApi = new DMMApi();
 
         // 商品を検索
         let products = { items: [] };
@@ -1438,64 +1438,46 @@ exports.generateArticleWithProducts = functions.region("asia-northeast1")
           }
         }
 
-        // 記事生成
+        // BlogTool初期化
         const blogTool = new BlogAutomationTool();
-        // 記事生成（既存のメソッドを使用）
-        let article;
+        
+        // 記事生成
+        const article = await blogTool.generateArticle(category);
+        
+        // 商品を記事に挿入
+        if (includeProducts && products.items.length > 0) {
+          article.content = await dmmApi.insertProductsIntoArticle(
+            article.content,
+            category,
+            { productCount, style: 'card', insertPosition: 'distributed' }
+          );
+        }
 
-if (template === 'product_review' && products.items.length > 0) {
-  // 商品レビュー記事を手動で構築
-  const product = products.items[0];
-  const reviewContent = `
-    <h2>${product.title}の詳細レビュー</h2>
-    <p><strong>価格:</strong> ${product.price}円</p>
-    <p><strong>評価:</strong> ⭐${product.rating}/5.0</p>
-    <p><strong>メーカー:</strong> ${product.maker || '不明'}</p>
-    <h3>商品の特徴</h3>
-    <p>この商品は現在非常に人気があり、多くのユーザーから高い評価を得ています。</p>
-  `;
-  
-  article = {
-    title: `【レビュー】${product.title} - 詳細評価`,
-    content: reviewContent,
-    category: category,
-    keywords: [product.title, category, 'レビュー'],
-    tags: ['商品レビュー', category, product.maker || '']
-  };
-} else {
-  // 通常記事生成（既存のメソッドを使用）
-  article = await blogTool.generateArticle(category);
-  
-  // タイトルをテンプレートに応じて修正
-  if (template === 'review') {
-    article.title = `【${category}】おすすめ商品レビュー ${new Date().toLocaleDateString('ja-JP')}`;
-  }
-}
+        // WordPressに投稿
+        const wpResponse = await blogTool.postToWordPress(article);
 
-// 商品を記事に挿入
-if (includeProducts && products.items.length > 0) {
-  article.content = await dmmApi.insertProductsIntoArticle(
-    article.content,
-    category,
-    { productCount, style: 'card', insertPosition: 'distributed' }
-  );
-}
-
-// WordPressに投稿（postToWordPressメソッドの引数形式に注意）
-const wpResponse = await blogTool.postToWordPress(article);
-
-res.json({
-  success: true,
-  postId: wpResponse.id || 'unknown',
-  url: wpResponse.link || `https://www.entamade.jp/?p=${wpResponse.id}`,
-  title: article.title,
-  productsIncluded: products.items.length,
-  products: products.items.map(p => ({
-    title: p.title,
-    price: p.price,
-    affiliateUrl: p.affiliateUrl
-  }))
-});
+        res.json({
+          success: true,
+          postId: wpResponse.id || 'unknown',
+          url: wpResponse.link || 'https://www.entamade.jp/',
+          title: article.title,
+          productsIncluded: products.items.length,
+          products: products.items.map(p => ({
+            title: p.title,
+            price: p.price,
+            affiliateUrl: p.affiliateUrl
+          }))
+        });
+        
+      } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({
+          success: false,
+          error: error.message
+        });
+      }
+    });
+  });
 
 /**
  * 商品検索API
