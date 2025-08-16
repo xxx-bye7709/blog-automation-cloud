@@ -1130,7 +1130,7 @@ exports.toggleSchedule = functions
   });
 
 // スケジュール手動実行エンドポイント
-exports.triggerScheduledPost = functions.https.onRequest(async (req, res) => {
+exports.triggerScheduledPost = functions.runWith({ timeoutSeconds: 540, memory: "2GB" }).https.onRequest(async (req, res) => {
   // CORS設定
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -1170,7 +1170,8 @@ exports.triggerScheduledPost = functions.https.onRequest(async (req, res) => {
     
     // 記事生成
     console.log(`${category}記事を生成中...`);
-    const result = await blogTool.generateAndPublish(category);
+    const article = await blogTool.generateArticle(category);
+    const result = await blogTool.postToWordPress(article);
     console.log('記事生成結果:', JSON.stringify(result));
     
     if (result.success) {
@@ -1319,6 +1320,7 @@ exports.triggerScheduledPost = functions
 
     try {
       // 関数内でScheduleManagerインスタンスを作成
+    const ScheduleManager = require('./lib/schedule-manager');
       const scheduleManager = new ScheduleManager(admin);
       
       // 実行可能かチェック
@@ -1343,7 +1345,8 @@ exports.triggerScheduledPost = functions
       const BlogAutomationTool = require('./lib/blog-tool');
       const blogTool = new BlogAutomationTool();
       
-      const result = await blogTool.generateAndPublish(category);
+      const article = await blogTool.generateArticle(category);
+      const result = await blogTool.postToWordPress(article);
       
       if (result.success) {
         await scheduleManager.incrementTodayPostCount();
@@ -1370,3 +1373,236 @@ exports.triggerScheduledPost = functions
     }
   });
 
+
+// 簡易動作確認用
+exports.quickTest = functions.runWith({ timeoutSeconds: 60 }).https.onRequest(async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  
+  try {
+    console.log('QuickTest: 開始');
+    
+    // スケジュールマネージャーだけテスト
+    const ScheduleManager = require('./lib/schedule-manager');
+    const scheduleManager = new ScheduleManager(admin);
+    
+    const schedule = await scheduleManager.getSchedule();
+    const canExecute = await scheduleManager.canExecute();
+    
+    console.log('QuickTest: 完了', { schedule, canExecute });
+    
+    res.json({
+      success: true,
+      schedule: schedule,
+      canExecute: canExecute
+    });
+  } catch (error) {
+    console.error('QuickTest エラー:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});
+
+// index.jsに追加する新しい関数
+
+/**
+ * DMM商品連携記事生成
+ */
+exports.generateArticleWithProducts = functions
+  .runWith({ timeoutSeconds: 540, memory: '2GB' })
+  .https.onRequest(async (req, res) => {
+    cors(req, res, async () => {
+      try {
+        const { 
+          template = 'review', 
+          category = 'anime',
+          keyword,
+          includeProducts = true,
+          productCount = 3
+        } = req.body;
+
+        // DMM API初期化
+        const DMMApi = require('./lib/dmm-api');
+        const dmmApi = new DMMApi();
+
+        // 商品を検索
+        let products = { items: [] };
+        if (includeProducts) {
+          if (keyword) {
+            products = await dmmApi.searchProducts({ keyword, hits: productCount });
+          } else {
+            products = await dmmApi.getProductsByGenre(category, productCount);
+          }
+        }
+
+        // 記事生成
+        const blogTool = new BlogAutomationTool();
+        let article;
+
+        if (template === 'product_review' && products.items.length > 0) {
+          // 商品レビュー記事
+          const productData = await dmmApi.prepareReviewData(products.items[0].id);
+          article = await blogTool.generateProductReview(productData);
+        } else {
+          // 通常記事生成
+          article = await blogTool.generateArticleByTemplate(template, { category });
+        }
+
+        // 商品を記事に挿入
+        if (includeProducts && products.items.length > 0) {
+          article.content = await dmmApi.insertProductsIntoArticle(
+            article.content, 
+            category,
+            { productCount, style: 'card', insertPosition: 'distributed' }
+          );
+        }
+
+        // WordPressに投稿
+        const wpResponse = await blogTool.postToWordPress(
+          article.title,
+          article.content,
+          article.category,
+          article.tags
+        );
+
+        res.json({
+          success: true,
+          postId: wpResponse.id,
+          url: wpResponse.link,
+          title: article.title,
+          productsIncluded: products.items.length,
+          products: products.items.map(p => ({
+            title: p.title,
+            price: p.price,
+            affiliateUrl: p.affiliateUrl
+          }))
+        });
+      } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+  });
+
+/**
+ * 商品検索API
+ */
+exports.searchProducts = functions
+  .https.onRequest(async (req, res) => {
+    cors(req, res, async () => {
+      try {
+        const { keyword, genre, limit = 10 } = req.query;
+        
+        const DMMApi = require('./lib/dmm-api');
+        const dmmApi = new DMMApi();
+        
+        let products;
+        if (keyword) {
+          products = await dmmApi.searchProducts({ keyword, hits: limit });
+        } else if (genre) {
+          products = await dmmApi.getProductsByGenre(genre, limit);
+        } else {
+          products = await dmmApi.getTrendingProducts('all', limit);
+        }
+
+        res.json({
+          success: true,
+          ...products
+        });
+      } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+  });
+
+/**
+ * 商品レビュー記事生成
+ */
+exports.generateProductReview = functions
+  .runWith({ timeoutSeconds: 540, memory: '2GB' })
+  .https.onRequest(async (req, res) => {
+    cors(req, res, async () => {
+      try {
+        const { productId } = req.body;
+        
+        if (!productId) {
+          return res.status(400).json({ 
+            success: false, 
+            error: 'productId is required' 
+          });
+        }
+
+        const DMMApi = require('./lib/dmm-api');
+        const dmmApi = new DMMApi();
+        
+        // 商品詳細取得
+        const productData = await dmmApi.prepareReviewData(productId);
+        
+        if (!productData) {
+          return res.status(404).json({ 
+            success: false, 
+            error: 'Product not found' 
+          });
+        }
+
+        // レビュー記事生成
+        const blogTool = new BlogAutomationTool();
+        const review = await blogTool.generateProductReviewArticle(productData);
+
+        // アフィリエイトリンクを含む完全な記事を生成
+        const fullContent = `
+${review.introduction}
+
+<div class="product-info">
+${dmmApi.generateProductHtml(productData, 'card')}
+</div>
+
+${review.features}
+
+${review.prosAndCons}
+
+${review.conclusion}
+
+<div class="product-cta">
+${dmmApi.generateProductHtml(productData, 'button')}
+</div>
+        `;
+
+        // WordPressに投稿
+        const wpResponse = await blogTool.postToWordPress(
+          review.title,
+          fullContent,
+          'review',
+          ['商品レビュー', productData.genre, productData.maker]
+        );
+
+        res.json({
+          success: true,
+          postId: wpResponse.id,
+          url: wpResponse.link,
+          title: review.title,
+          product: {
+            name: productData.title,
+            price: productData.price,
+            rating: productData.rating,
+            affiliateUrl: productData.affiliateUrl
+          }
+        });
+      } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+  });
