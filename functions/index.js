@@ -1682,3 +1682,174 @@ exports.debugBlogToolDetail = functions
     });
   });
 
+// index.jsに追加するテスト関数
+exports.testProductGeneration = functions
+  .region('asia-northeast1')
+  .runWith({ timeoutSeconds: 60 })
+  .https.onRequest(async (req, res) => {
+    // CORSを明示的に設定
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    
+    try {
+      console.log('=== Test Function Starting ===');
+      
+      // 環境変数の確認
+      const envCheck = {
+        hasOpenAI: !!process.env.OPENAI_API_KEY,
+        openAIKeyLength: process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.length : 0,
+        hasDMM: !!process.env.DMM_API_ID,
+        hasWP: !!process.env.WP_URL
+      };
+      
+      console.log('Environment check:', envCheck);
+      
+      // Step 1: DMM APIテスト
+      let dmmResult = { success: false };
+      try {
+        const DMMApi = require('./lib/dmm-api');
+        const dmmApi = new DMMApi();
+        const products = await dmmApi.searchProducts({
+          keyword: 'アニメ',
+          hits: 1
+        });
+        dmmResult = {
+          success: true,
+          productCount: products ? products.length : 0,
+          firstProduct: products && products[0] ? products[0].title : null
+        };
+      } catch (dmmError) {
+        dmmResult = {
+          success: false,
+          error: dmmError.message,
+          statusCode: dmmError.response?.status
+        };
+      }
+      
+      console.log('DMM API test result:', dmmResult);
+      
+      // Step 2: OpenAI APIテスト（軽量）
+      let openAIResult = { success: false };
+      try {
+        const axios = require('axios');
+        const response = await axios.post(
+          'https://api.openai.com/v1/chat/completions',
+          {
+            model: 'gpt-4o-mini',
+            messages: [{ role: 'user', content: 'Say "API working"' }],
+            max_tokens: 10
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 10000
+          }
+        );
+        
+        openAIResult = {
+          success: true,
+          response: response.data.choices[0].message.content
+        };
+      } catch (openAIError) {
+        openAIResult = {
+          success: false,
+          error: openAIError.message,
+          statusCode: openAIError.response?.status,
+          errorData: openAIError.response?.data
+        };
+      }
+      
+      console.log('OpenAI API test result:', openAIResult);
+      
+      // Step 3: BlogAutomationToolの確認
+      let blogToolResult = { success: false };
+      try {
+        const BlogAutomationTool = require('./lib/blog-tool');
+        const blogTool = new BlogAutomationTool();
+        blogToolResult = {
+          success: true,
+          hasGenerateMethod: typeof blogTool.generateArticle === 'function'
+        };
+      } catch (blogError) {
+        blogToolResult = {
+          success: false,
+          error: blogError.message
+        };
+      }
+      
+      // 結果をまとめて返す
+      const testResults = {
+        success: true,
+        timestamp: new Date().toISOString(),
+        environment: envCheck,
+        tests: {
+          dmm: dmmResult,
+          openai: openAIResult,
+          blogTool: blogToolResult
+        },
+        recommendation: generateRecommendation(dmmResult, openAIResult, blogToolResult)
+      };
+      
+      console.log('=== Test Complete ===');
+      res.status(200).json(testResults);
+      
+    } catch (error) {
+      console.error('Test function error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        stack: error.stack
+      });
+    }
+  });
+
+// 推奨事項を生成
+function generateRecommendation(dmm, openai, blogTool) {
+  const issues = [];
+  
+  if (!dmm.success) {
+    if (dmm.statusCode === 403) {
+      issues.push('DMM API: 403エラー - API IDまたはアフィリエイトIDを確認してください');
+    } else {
+      issues.push(`DMM API: ${dmm.error}`);
+    }
+  }
+  
+  if (!openai.success) {
+    if (openai.statusCode === 401) {
+      issues.push('OpenAI API: 401エラー - APIキーが無効です。新しいキーに更新してください');
+    } else if (openai.statusCode === 403) {
+      issues.push('OpenAI API: 403エラー - APIキーの権限またはクォータを確認してください');
+    } else if (openai.statusCode === 429) {
+      issues.push('OpenAI API: 429エラー - レート制限に達しています');
+    } else {
+      issues.push(`OpenAI API: ${openai.error}`);
+    }
+  }
+  
+  if (!blogTool.success) {
+    issues.push(`BlogTool: ${blogTool.error}`);
+  }
+  
+  if (issues.length === 0) {
+    return '✅ すべてのコンポーネントが正常に動作しています';
+  }
+  
+  return {
+    status: '⚠️ 修正が必要な項目があります',
+    issues: issues,
+    nextSteps: [
+      '1. 上記のエラーを確認',
+      '2. 必要に応じて環境変数を更新',
+      '3. firebase deploy --only functions で再デプロイ'
+    ]
+  };
+}
