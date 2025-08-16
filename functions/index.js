@@ -1733,3 +1733,151 @@ exports.simpleDMMTest = functions
       res.status(500).json(errorInfo);
     }
   });
+
+// index.js に追加 - モック商品データで記事生成
+
+exports.generateArticleWithMockProducts = functions
+  .region('asia-northeast1')
+  .runWith({ timeoutSeconds: 300, memory: '1GB' })
+  .https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    
+    try {
+      const BlogAutomationTool = require('./lib/blog-tool');
+      
+      const {
+        keyword = 'エンタメ',
+        category = 'entertainment',
+        templateId = 'product_review',
+        postToWordPress = false
+      } = req.query;
+      
+      // モック商品データを生成
+      const mockProducts = [
+        {
+          title: `${keyword}関連の人気商品1`,
+          affiliateUrl: 'https://www.entamade.jp',
+          price: '2,980円',
+          description: '話題の商品です。多くのユーザーから高評価を得ています。',
+          genre: category
+        },
+        {
+          title: `${keyword}関連の人気商品2`,
+          affiliateUrl: 'https://www.entamade.jp',
+          price: '3,980円',
+          description: '注目の新作。限定特典付きでお得です。',
+          genre: category
+        },
+        {
+          title: `${keyword}関連の人気商品3`,
+          affiliateUrl: 'https://www.entamade.jp',
+          price: '1,980円',
+          description: 'コストパフォーマンスに優れた人気商品。',
+          genre: category
+        }
+      ];
+      
+      // BlogAutomationToolで記事生成
+      const blogTool = new BlogAutomationTool();
+      
+      const articlePrompt = `
+${keyword}に関する魅力的な記事を作成してください。
+
+【おすすめ商品】
+${mockProducts.map((p, i) => `
+${i + 1}. ${p.title}
+価格: ${p.price}
+${p.description}
+`).join('\n')}
+
+【記事の要件】
+- SEOを意識したキーワードの使用
+- 読者の興味を引く内容
+- カテゴリ: ${category}
+`;
+      
+      const articleData = await blogTool.generateArticle({
+        templateId: templateId,
+        customPrompt: articlePrompt,
+        includeImages: true
+      });
+      
+      // 商品セクションを追加
+      const productSection = `
+<h2>おすすめ情報</h2>
+<div class="product-list">
+${mockProducts.map(p => `
+<div class="product-item" style="margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px;">
+  <h3>${p.title}</h3>
+  <p class="price" style="color: #ff6b6b; font-weight: bold;">価格: ${p.price}</p>
+  <p>${p.description}</p>
+  <p><a href="${p.affiliateUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">詳細を見る</a></p>
+</div>
+`).join('')}
+</div>
+`;
+      
+      const enhancedContent = articleData.content + '\n\n' + productSection;
+      
+      // WordPressに投稿
+      let postResult = null;
+      if (postToWordPress === 'true' || postToWordPress === true) {
+        try {
+          const wordpress = require('wordpress');
+          const client = wordpress.createClient({
+            url: process.env.WP_URL,
+            username: process.env.WP_USERNAME,
+            password: process.env.WP_PASSWORD
+          });
+          
+          const postData = {
+            title: articleData.title,
+            content: enhancedContent,
+            status: 'publish',
+            categories: [category],
+            tags: [keyword]
+          };
+          
+          postResult = await new Promise((resolve, reject) => {
+            client.newPost(postData, (error, id) => {
+              if (error) {
+                reject(error);
+              } else {
+                resolve({
+                  success: true,
+                  postId: id,
+                  url: `${process.env.WP_URL}/?p=${id}`
+                });
+              }
+            });
+          });
+        } catch (wpError) {
+          console.error('WordPress posting error:', wpError);
+          postResult = {
+            success: false,
+            error: wpError.message
+          };
+        }
+      }
+      
+      res.status(200).json({
+        success: true,
+        message: 'Article generated with mock products',
+        article: {
+          title: articleData.title,
+          content: enhancedContent,
+          category: category,
+          tags: [keyword]
+        },
+        products: mockProducts,
+        wordpressPost: postResult
+      });
+      
+    } catch (error) {
+      console.error('Error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
