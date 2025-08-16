@@ -1410,82 +1410,183 @@ exports.quickTest = functions.runWith({ timeoutSeconds: 60 }).https.onRequest(as
 /**
  * DMM商品連携記事生成
  */
+// index.js の generateArticleWithProducts を以下に置き換える
+// ※ index.jsの先頭で const functions = require('firebase-functions'); が定義されていることを確認
+
 exports.generateArticleWithProducts = functions
   .region('asia-northeast1')
   .runWith({ timeoutSeconds: 540, memory: '2GB' })
   .https.onRequest(async (req, res) => {
+    // CORS設定
+    const cors = require('cors')({ origin: true });
+    
     cors(req, res, async () => {
       try {
-        const BlogAutomationTool = require('./lib/blog-tool');
-        const DMMApi = require('./lib/dmm-api');
+        console.log('=== Starting generateArticleWithProducts ===');
         
-        const { 
-          template = 'review', 
+        // パラメータ取得
+        const {
+          keyword = 'アニメ',
           category = 'anime',
-          keyword,
-          includeProducts = true,
-          productCount = 3
-        } = req.body;
-
-        // DMM API初期化
-        const dmmApi = new DMMApi();
-
-        // 商品を検索
-        let products = { items: [] };
-        if (includeProducts) {
-          if (keyword) {
-            products = await dmmApi.searchProducts({ keyword, hits: productCount });
-          } else {
-            products = await dmmApi.getProductsByGenre(category, productCount);
+          limit = 5,
+          templateId = 'product_review',
+          postToWordPress = false
+        } = req.query;
+        
+        console.log('Parameters:', { keyword, category, limit, templateId, postToWordPress });
+        
+        // モジュール読み込み
+        const BlogAutomationTool = require('./lib/blog-tool');
+        const axios = require('axios');
+        
+        // 1. DMM API検索（既存のsearchProducts関数と同じロジック）
+        console.log('Searching DMM products...');
+        let products = [];
+        
+        try {
+          const searchUrl = `https://asia-northeast1-blog-automation-system.cloudfunctions.net/searchProducts`;
+          const searchResponse = await axios.get(searchUrl, {
+            params: { keyword, limit },
+            timeout: 10000
+          });
+          
+          if (searchResponse.data?.success && searchResponse.data?.items) {
+            products = searchResponse.data.items;
+            console.log(`Found ${products.length} products from DMM`);
           }
+        } catch (dmmError) {
+          console.log('DMM search failed, continuing without products:', dmmError.message);
         }
-
-        // BlogTool初期化
+        
+        // 2. 記事生成
+        console.log('Generating article...');
         const blogTool = new BlogAutomationTool();
         
-        // 記事生成
-        let article;
-        if (template === 'product_review' && products.items.length > 0) {
-          const productData = await dmmApi.prepareReviewData(products.items[0].id);
-          article = await blogTool.generateProductReview(productData);
-        } else {
-          article = await blogTool.generateArticleByTemplate(template, { category });
+        let articlePrompt = `${keyword}に関する魅力的な記事を作成してください。`;
+        
+        // 商品がある場合はプロンプトに追加
+        if (products.length > 0) {
+          articlePrompt = `
+以下の商品情報を基に、${keyword}に関する魅力的なレビュー記事を作成してください。
+
+【商品リスト】
+${products.map((p, i) => `
+${i + 1}. ${p.title}
+価格: ${p.price}
+${p.description || ''}
+${p.maker ? `メーカー: ${p.maker}` : ''}
+${p.genre ? `ジャンル: ${p.genre}` : ''}
+`).join('\n')}
+
+【記事の要件】
+- 各商品の魅力を具体的に説明
+- SEOを意識したキーワードの使用
+- 読者の購買意欲を高める文章
+- カテゴリ: ${category}
+`;
         }
-
-        // 商品を記事に挿入
-        if (includeProducts && products.items.length > 0) {
-          article.content = await dmmApi.insertProductsIntoArticle(
-            article.content, 
-            category,
-            { productCount, style: 'card', insertPosition: 'distributed' }
-          );
-        }
-
-        // WordPressに投稿
-        const wpResponse = await blogTool.postToWordPress(
-          article.title,
-          article.content,
-          article.category,
-          article.tags
-        );
-
-        res.json({
-          success: true,
-          postId: wpResponse.id,
-          url: wpResponse.link,
-          title: article.title,
-          productsIncluded: products.items.length,
-          products: products.items.map(p => ({
-            title: p.title,
-            price: p.price,
-            affiliateUrl: p.affiliateUrl
-          }))
+        
+        const articleData = await blogTool.generateArticle({
+          templateId: templateId || 'default',
+          customPrompt: articlePrompt,
+          includeImages: true
         });
+        
+        // 3. 商品リンクを記事に追加
+        let enhancedContent = articleData.content || '';
+        
+        if (products.length > 0) {
+          const productSection = `
+<h2>おすすめ商品</h2>
+<div class="product-list">
+${products.map(p => `
+<div class="product-item" style="margin-bottom: 30px; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+  ${p.imageUrl ? `<img src="${p.imageUrl}" alt="${p.title}" style="max-width: 200px; float: left; margin-right: 20px;">` : ''}
+  <h3>${p.title}</h3>
+  <p class="price" style="font-size: 1.2em; color: #ff6b6b; font-weight: bold;">${p.price}</p>
+  ${p.description ? `<p>${p.description}</p>` : ''}
+  ${p.maker ? `<p><strong>メーカー:</strong> ${p.maker}</p>` : ''}
+  ${p.genre ? `<p><strong>ジャンル:</strong> ${p.genre}</p>` : ''}
+  ${p.rating && p.rating > 0 ? `<p><strong>評価:</strong> ⭐${p.rating}</p>` : ''}
+  <p><a href="${p.affiliateUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">詳細を見る</a></p>
+  <div style="clear: both;"></div>
+</div>
+`).join('')}
+</div>
+`;
+          enhancedContent = enhancedContent + '\n\n' + productSection;
+        }
+        
+        // 4. WordPressに投稿
+        let postResult = null;
+        if (postToWordPress === 'true' || postToWordPress === true) {
+          console.log('Posting to WordPress...');
+          
+          try {
+            const wordpress = require('wordpress');
+            const client = wordpress.createClient({
+              url: process.env.WP_URL,
+              username: process.env.WP_USERNAME,
+              password: process.env.WP_PASSWORD
+            });
+            
+            const postData = {
+              title: articleData.title,
+              content: enhancedContent,
+              status: 'publish',
+              categories: [category],
+              tags: [keyword]
+            };
+            
+            postResult = await new Promise((resolve, reject) => {
+              client.newPost(postData, (error, id) => {
+                if (error) {
+                  console.error('WordPress posting error:', error);
+                  reject(error);
+                } else {
+                  console.log('Successfully posted to WordPress. Post ID:', id);
+                  resolve({
+                    success: true,
+                    postId: id,
+                    url: `${process.env.WP_URL}/?p=${id}`
+                  });
+                }
+              });
+            });
+          } catch (wpError) {
+            console.error('WordPress posting failed:', wpError);
+            postResult = {
+              success: false,
+              error: wpError.message
+            };
+          }
+        }
+        
+        // 5. レスポンス
+        const response = {
+          success: true,
+          article: {
+            title: articleData.title,
+            content: enhancedContent,
+            category: category,
+            tags: [keyword]
+          },
+          products: products,
+          productCount: products.length,
+          wordpressPost: postResult
+        };
+        
+        console.log('=== Completed generateArticleWithProducts ===');
+        console.log(`Generated article with ${products.length} products`);
+        
+        res.status(200).json(response);
+        
       } catch (error) {
-        console.error('Error:', error);
-        res.status(500).json({ 
-          success: false, 
-          error: error.message 
+        console.error('Error in generateArticleWithProducts:', error);
+        res.status(500).json({
+          success: false,
+          error: error.message,
+          stack: error.stack
         });
       }
     });
