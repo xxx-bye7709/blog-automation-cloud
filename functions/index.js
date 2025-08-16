@@ -1501,6 +1501,7 @@ exports.searchProducts = functions
         const { keyword, genre, limit = 10 } = req.query;
         
         const DMMApi = require('./lib/dmm-api');
+        const BlogAutomationTool = require('./lib/blog-tool');
         const dmmApi = new DMMApi();
         
         let products;
