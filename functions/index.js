@@ -1411,10 +1411,14 @@ exports.quickTest = functions.runWith({ timeoutSeconds: 60 }).https.onRequest(as
  * DMM商品連携記事生成
  */
 exports.generateArticleWithProducts = functions
+  .region('asia-northeast1')
   .runWith({ timeoutSeconds: 540, memory: '2GB' })
   .https.onRequest(async (req, res) => {
     cors(req, res, async () => {
       try {
+        const BlogAutomationTool = require('./lib/blog-tool');
+        const DMMApi = require('./lib/dmm-api');
+        
         const { 
           template = 'review', 
           category = 'anime',
@@ -1424,7 +1428,6 @@ exports.generateArticleWithProducts = functions
         } = req.body;
 
         // DMM API初期化
-        const DMMApi = require('./lib/dmm-api');
         const dmmApi = new DMMApi();
 
         // 商品を検索
@@ -1437,16 +1440,15 @@ exports.generateArticleWithProducts = functions
           }
         }
 
-        // 記事生成
+        // BlogTool初期化
         const blogTool = new BlogAutomationTool();
+        
+        // 記事生成
         let article;
-
         if (template === 'product_review' && products.items.length > 0) {
-          // 商品レビュー記事
           const productData = await dmmApi.prepareReviewData(products.items[0].id);
           article = await blogTool.generateProductReview(productData);
         } else {
-          // 通常記事生成
           article = await blogTool.generateArticleByTemplate(template, { category });
         }
 
@@ -1528,10 +1530,14 @@ exports.searchProducts = functions
  * 商品レビュー記事生成
  */
 exports.generateProductReview = functions
+  .region('asia-northeast1')
   .runWith({ timeoutSeconds: 540, memory: '2GB' })
   .https.onRequest(async (req, res) => {
     cors(req, res, async () => {
       try {
+        const BlogAutomationTool = require('./lib/blog-tool');
+        const DMMApi = require('./lib/dmm-api');
+        
         const { productId } = req.body;
         
         if (!productId) {
@@ -1541,7 +1547,6 @@ exports.generateProductReview = functions
           });
         }
 
-        const DMMApi = require('./lib/dmm-api');
         const dmmApi = new DMMApi();
         
         // 商品詳細取得
@@ -1554,8 +1559,10 @@ exports.generateProductReview = functions
           });
         }
 
-        // レビュー記事生成
+        // BlogTool初期化
         const blogTool = new BlogAutomationTool();
+        
+        // レビュー記事生成
         const review = await blogTool.generateProductReviewArticle(productData);
 
         // アフィリエイトリンクを含む完全な記事を生成
