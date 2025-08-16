@@ -1410,15 +1410,11 @@ exports.quickTest = functions.runWith({ timeoutSeconds: 60 }).https.onRequest(as
 /**
  * DMM商品連携記事生成
  */
-exports.generateArticleWithProducts = functions
-  .region('asia-northeast1')
+exports.generateArticleWithProducts = functions.region("asia-northeast1")
   .runWith({ timeoutSeconds: 540, memory: '2GB' })
   .https.onRequest(async (req, res) => {
     cors(req, res, async () => {
       try {
-        const BlogAutomationTool = require('./lib/blog-tool');
-        const DMMApi = require('./lib/dmm-api');
-        
         const { 
           template = 'review', 
           category = 'anime',
@@ -1428,6 +1424,8 @@ exports.generateArticleWithProducts = functions
         } = req.body;
 
         // DMM API初期化
+        const DMMApi = require('./lib/dmm-api');
+        const BlogAutomationTool = require('./lib/blog-tool');
         const dmmApi = new DMMApi();
 
         // 商品を検索
@@ -1440,68 +1438,75 @@ exports.generateArticleWithProducts = functions
           }
         }
 
-        // BlogTool初期化
-        const blogTool = new BlogAutomationTool();
-        
         // 記事生成
+        const blogTool = new BlogAutomationTool();
+        // 記事生成（既存のメソッドを使用）
         let article;
-        if (template === 'product_review' && products.items.length > 0) {
-          const productData = await dmmApi.prepareReviewData(products.items[0].id);
-          article = await blogTool.generateProductReview(productData);
-        } else {
-          article = await blogTool.generateArticleByTemplate(template, { category });
-        }
 
-        // 商品を記事に挿入
-        if (includeProducts && products.items.length > 0) {
-          article.content = await dmmApi.insertProductsIntoArticle(
-            article.content, 
-            category,
-            { productCount, style: 'card', insertPosition: 'distributed' }
-          );
-        }
+if (template === 'product_review' && products.items.length > 0) {
+  // 商品レビュー記事を手動で構築
+  const product = products.items[0];
+  const reviewContent = `
+    <h2>${product.title}の詳細レビュー</h2>
+    <p><strong>価格:</strong> ${product.price}円</p>
+    <p><strong>評価:</strong> ⭐${product.rating}/5.0</p>
+    <p><strong>メーカー:</strong> ${product.maker || '不明'}</p>
+    <h3>商品の特徴</h3>
+    <p>この商品は現在非常に人気があり、多くのユーザーから高い評価を得ています。</p>
+  `;
+  
+  article = {
+    title: `【レビュー】${product.title} - 詳細評価`,
+    content: reviewContent,
+    category: category,
+    keywords: [product.title, category, 'レビュー'],
+    tags: ['商品レビュー', category, product.maker || '']
+  };
+} else {
+  // 通常記事生成（既存のメソッドを使用）
+  article = await blogTool.generateArticle(category);
+  
+  // タイトルをテンプレートに応じて修正
+  if (template === 'review') {
+    article.title = `【${category}】おすすめ商品レビュー ${new Date().toLocaleDateString('ja-JP')}`;
+  }
+}
 
-        // WordPressに投稿
-        const wpResponse = await blogTool.postToWordPress(
-          article.title,
-          article.content,
-          article.category,
-          article.tags
-        );
+// 商品を記事に挿入
+if (includeProducts && products.items.length > 0) {
+  article.content = await dmmApi.insertProductsIntoArticle(
+    article.content,
+    category,
+    { productCount, style: 'card', insertPosition: 'distributed' }
+  );
+}
 
-        res.json({
-          success: true,
-          postId: wpResponse.id,
-          url: wpResponse.link,
-          title: article.title,
-          productsIncluded: products.items.length,
-          products: products.items.map(p => ({
-            title: p.title,
-            price: p.price,
-            affiliateUrl: p.affiliateUrl
-          }))
-        });
-      } catch (error) {
-        console.error('Error:', error);
-        res.status(500).json({ 
-          success: false, 
-          error: error.message 
-        });
-      }
-    });
-  });
+// WordPressに投稿（postToWordPressメソッドの引数形式に注意）
+const wpResponse = await blogTool.postToWordPress(article);
+
+res.json({
+  success: true,
+  postId: wpResponse.id || 'unknown',
+  url: wpResponse.link || `https://www.entamade.jp/?p=${wpResponse.id}`,
+  title: article.title,
+  productsIncluded: products.items.length,
+  products: products.items.map(p => ({
+    title: p.title,
+    price: p.price,
+    affiliateUrl: p.affiliateUrl
+  }))
+});
 
 /**
  * 商品検索API
  */
-exports.searchProducts = functions
+exports.searchProducts = functions.region("asia-northeast1")
   .https.onRequest(async (req, res) => {
     cors(req, res, async () => {
       try {
         const { keyword, genre, limit = 10 } = req.query;
         
         const DMMApi = require('./lib/dmm-api');
-        const BlogAutomationTool = require('./lib/blog-tool');
         const dmmApi = new DMMApi();
         
         let products;
@@ -1530,15 +1535,11 @@ exports.searchProducts = functions
 /**
  * 商品レビュー記事生成
  */
-exports.generateProductReview = functions
-  .region('asia-northeast1')
+exports.generateProductReview = functions.region("asia-northeast1")
   .runWith({ timeoutSeconds: 540, memory: '2GB' })
   .https.onRequest(async (req, res) => {
     cors(req, res, async () => {
       try {
-        const BlogAutomationTool = require('./lib/blog-tool');
-        const DMMApi = require('./lib/dmm-api');
-        
         const { productId } = req.body;
         
         if (!productId) {
@@ -1548,6 +1549,8 @@ exports.generateProductReview = functions
           });
         }
 
+        const DMMApi = require('./lib/dmm-api');
+        const BlogAutomationTool = require('./lib/blog-tool');
         const dmmApi = new DMMApi();
         
         // 商品詳細取得
@@ -1560,10 +1563,8 @@ exports.generateProductReview = functions
           });
         }
 
-        // BlogTool初期化
-        const blogTool = new BlogAutomationTool();
-        
         // レビュー記事生成
+        const blogTool = new BlogAutomationTool();
         const review = await blogTool.generateProductReviewArticle(productData);
 
         // アフィリエイトリンクを含む完全な記事を生成
@@ -1662,3 +1663,40 @@ exports.debugDMM = functions
       }
     });
   });
+
+/**
+ * BlogTool詳細デバッグ
+ */
+exports.debugBlogToolDetail = functions
+  .region('asia-northeast1')
+  .https.onRequest(async (req, res) => {
+    cors(req, res, async () => {
+      try {
+        // 様々な方法でrequireを試す
+        const test1 = require('./lib/blog-tool');
+        const test2 = require('./lib/blog-tool.js');
+        
+        res.json({
+          success: true,
+          test1: {
+            type: typeof test1,
+            isFunction: typeof test1 === 'function',
+            hasPrototype: !!test1.prototype,
+            constructorName: test1.name || 'unnamed',
+            keys: Object.keys(test1).slice(0, 5)
+          },
+          test2: {
+            type: typeof test2,
+            isFunction: typeof test2 === 'function'
+          }
+        });
+      } catch (error) {
+        res.json({ 
+          success: false, 
+          error: error.message,
+          stack: error.stack.split('\n').slice(0, 5)
+        });
+      }
+    });
+  });
+
