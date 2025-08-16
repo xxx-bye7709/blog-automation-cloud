@@ -1606,3 +1606,51 @@ ${dmmApi.generateProductHtml(productData, 'button')}
       }
     });
   });
+
+/**
+ * DMM API設定デバッグ
+ */
+exports.debugDMM = functions
+  .region('asia-northeast1')
+  .https.onRequest(async (req, res) => {
+    cors(req, res, async () => {
+      try {
+        const DMMApi = require('./lib/dmm-api');
+        const dmmApi = new DMMApi();
+        
+        // 環境変数の状態を確認（値は一部隠す）
+        const apiIdStatus = process.env.DMM_API_ID ? 
+          `Set (${process.env.DMM_API_ID.substring(0, 4)}...)` : 'NOT SET';
+        const affiliateIdStatus = process.env.DMM_AFFILIATE_ID || 'NOT SET';
+        
+        // テストリクエスト
+        const axios = require('axios');
+        let testResult = 'Not tested';
+        
+        if (process.env.DMM_API_ID && process.env.DMM_AFFILIATE_ID) {
+          try {
+            const testUrl = `https://api.dmm.com/affiliate/v3/ItemList?api_id=${process.env.DMM_API_ID}&affiliate_id=${process.env.DMM_AFFILIATE_ID}&hits=1&keyword=test&output=json`;
+            const response = await axios.get(testUrl);
+            testResult = response.data?.result ? 'API Connected' : 'API Error: ' + JSON.stringify(response.data);
+          } catch (error) {
+            testResult = `Connection Error: ${error.message}`;
+          }
+        }
+        
+        res.json({
+          success: true,
+          config: {
+            DMM_API_ID: apiIdStatus,
+            DMM_AFFILIATE_ID: affiliateIdStatus,
+            baseUrl: 'https://api.dmm.com/affiliate/v3'
+          },
+          testResult: testResult
+        });
+      } catch (error) {
+        res.status(500).json({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+  });
