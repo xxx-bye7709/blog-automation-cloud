@@ -2124,3 +2124,74 @@ function generateRecommendation(dmm, openai, blogTool) {
     ]
   };
 }
+
+// index.js の最後に追加するシンプルなテスト関数
+
+exports.simpleDMMTest = functions
+  .region('asia-northeast1')
+  .https.onRequest(async (req, res) => {
+    // CORS設定
+    res.set('Access-Control-Allow-Origin', '*');
+    
+    try {
+      const axios = require('axios');
+      
+      // DMM API設定を確認
+      const config = {
+        apiId: process.env.DMM_API_ID,
+        affiliateId: process.env.DMM_AFFILIATE_ID,
+        hasApiId: !!process.env.DMM_API_ID,
+        hasAffiliateId: !!process.env.DMM_AFFILIATE_ID
+      };
+      
+      console.log('DMM Config:', config);
+      
+      // 直接DMM APIを呼び出し
+      const params = {
+        api_id: process.env.DMM_API_ID,
+        affiliate_id: process.env.DMM_AFFILIATE_ID,
+        site: 'FANZA',
+        service: 'digital',
+        floor: 'videoa',
+        keyword: '動画',
+        hits: 5,
+        sort: 'rank',
+        output: 'json'
+      };
+      
+      console.log('Request params:', params);
+      
+      const response = await axios.get('https://api.dmm.com/affiliate/v3/ItemList', {
+        params: params,
+        timeout: 10000
+      });
+      
+      const result = {
+        success: true,
+        status: response.status,
+        resultCount: response.data?.result?.result_count || 0,
+        items: response.data?.result?.items?.length || 0,
+        firstItem: response.data?.result?.items?.[0]?.title || null,
+        message: response.data?.result?.message || null
+      };
+      
+      console.log('DMM API Result:', result);
+      res.status(200).json(result);
+      
+    } catch (error) {
+      console.error('DMM API Error:', error.message);
+      
+      const errorInfo = {
+        success: false,
+        error: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+        config: {
+          hasApiId: !!process.env.DMM_API_ID,
+          hasAffiliateId: !!process.env.DMM_AFFILIATE_ID
+        }
+      };
+      
+      res.status(500).json(errorInfo);
+    }
+  });
