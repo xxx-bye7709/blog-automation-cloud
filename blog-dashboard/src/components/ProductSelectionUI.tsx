@@ -42,9 +42,6 @@ const ProductSelectionUI: React.FC = () => {
   const [searchPerformed, setSearchPerformed] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  
-  const API_URL = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_URL || 
-    'https://asia-northeast1-blog-automation-system.cloudfunctions.net';
 
   const searchProducts = async () => {
     if (!keyword.trim()) {
@@ -58,15 +55,16 @@ const ProductSelectionUI: React.FC = () => {
     setSearchPerformed(true);
     
     try {
+      // Next.js APIルートを使用（CORSエラー回避）
       const response = await fetch(
-        `${API_URL}/searchProductsForDashboard?keyword=${encodeURIComponent(keyword)}&limit=20`
+        `/api/products/search?keyword=${encodeURIComponent(keyword)}&limit=20`
       );
       const data = await response.json();
       
       if (data.success) {
-        setProducts(data.products);
+        setProducts(data.products || []);
         setSelectedProducts([]);
-        if (data.products.length === 0) {
+        if (!data.products || data.products.length === 0) {
           setError('商品が見つかりませんでした。別のキーワードをお試しください。');
         }
       } else {
@@ -107,7 +105,8 @@ const ProductSelectionUI: React.FC = () => {
     setSuccess('');
     
     try {
-      const response = await fetch(`${API_URL}/generateArticleFromDashboard`, {
+      // Next.js APIルートを使用（CORSエラー回避）
+      const response = await fetch('/api/products/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -126,8 +125,8 @@ const ProductSelectionUI: React.FC = () => {
       if (data.success) {
         setSuccess(
           autoPublish 
-            ? `記事を生成してWordPressに投稿しました！（${data.productCount}商品）` 
-            : `記事を生成しました！（${data.productCount}商品）`
+            ? `記事を生成してWordPressに投稿しました！（${data.productCount || selectedProducts.length}商品）` 
+            : `記事を生成しました！（${data.productCount || selectedProducts.length}商品）`
         );
         
         if (data.wordpressPost?.url) {
