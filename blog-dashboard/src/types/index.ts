@@ -1,0 +1,326 @@
+// types/index.ts - プロジェクト全体の型定義
+
+// ==================== 基本的な型定義 ====================
+
+// 投稿の状態
+export type PostStatus = 'pending' | 'published' | 'failed' | 'scheduled' | 'draft';
+
+// 記事タイプ
+export type ArticleType = 'review' | 'ranking' | 'comparison';
+
+// 通知タイプ
+export type NotificationType = 'success' | 'error' | 'info' | 'warning';
+
+// ==================== エンティティ型 ====================
+
+// 投稿データ
+export interface Post {
+  id: string | number;
+  title: string;
+  category: string;
+  status: PostStatus;
+  timestamp: string;
+  url?: string;
+  error?: string;
+  imageUrl?: string;
+  wordpressId?: number;
+  content?: string;
+  excerpt?: string;
+  tags?: string[];
+  author?: string;
+  viewCount?: number;
+  engagementRate?: number;
+}
+
+// カテゴリー
+export interface Category {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  postCount?: number;
+  enabled?: boolean;
+  priority?: number;
+}
+
+// 商品データ
+export interface Product {
+  id: string;
+  contentId?: string;
+  productId?: string;
+  title: string;
+  price: string;
+  listPrice?: string | null;
+  imageUrl?: string | null;
+  thumbnailUrl?: string | null;
+  affiliateUrl: string;
+  description?: string;
+  maker?: string;
+  genre?: string;
+  actress?: string;
+  director?: string;
+  rating?: number;
+  reviewCount?: number;
+  releaseDate?: string;
+  duration?: string;
+  sampleImages?: string[];
+  sampleMovie?: string | null;
+}
+
+// スケジュール
+export interface Schedule {
+  id: string;
+  title: string;
+  time: string;
+  frequency: string;
+  category: string;
+  categoryIcon?: string;
+  status: 'active' | 'paused' | 'completed';
+  nextRun: string;
+  lastRun: string;
+  posts: number;
+  performance: {
+    views: string;
+    engagement: number;
+  };
+  color?: string;
+  enabled?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// システムメトリクス
+export interface SystemMetrics {
+  todayPosts?: number;
+  monthlyPosts?: number;
+  successRate?: number | string;
+  metrics?: {
+    totalPosts: number;
+    successRate: string;
+    averageTimeSeconds: string;
+    postsPerHour: number;
+    imageUploadSuccessRate: string;
+  };
+  timestamp?: string;
+  errors?: number;
+  warnings?: number;
+}
+
+// 通知
+export interface Notification {
+  id?: string;
+  message: string;
+  type: NotificationType;
+  timestamp?: string;
+  duration?: number;
+  action?: {
+    label: string;
+    handler: () => void;
+  };
+}
+
+// ==================== API関連の型 ====================
+
+// APIレスポンスの基本型
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+  timestamp?: string;
+  statusCode?: number;
+}
+
+// バッチ処理結果
+export interface BatchResult {
+  success: boolean;
+  postId?: string;
+  title?: string;
+  category?: string;
+  url?: string;
+  error?: string;
+  retryable?: boolean;
+}
+
+// 記事生成リクエスト
+export interface GenerateArticleRequest {
+  keyword?: string;
+  category: string;
+  selectedProducts?: Product[];
+  articleType?: ArticleType;
+  autoPublish?: boolean;
+  scheduledTime?: string;
+  tags?: string[];
+  customPrompt?: string;
+}
+
+// 記事生成レスポンス
+export interface GenerateArticleResponse extends ApiResponse {
+  postId?: string;
+  title?: string;
+  url?: string;
+  imageUrl?: string;
+  wordpressPost?: {
+    id: number;
+    url: string;
+    status: string;
+  };
+  productCount?: number;
+  generated?: number;
+  results?: BatchResult[];
+}
+
+// 商品検索リクエスト
+export interface SearchProductsRequest {
+  keyword: string;
+  limit?: number;
+  offset?: number;
+  sort?: 'price' | 'rating' | 'date' | 'review';
+  order?: 'asc' | 'desc';
+  category?: string;
+  minPrice?: number;
+  maxPrice?: number;
+}
+
+// ==================== コンポーネントProps型 ====================
+
+// ダッシュボードProps
+export interface DashboardProps {
+  initialMetrics?: SystemMetrics;
+  onRefresh?: () => void;
+  className?: string;
+}
+
+// スケジュールページProps
+export interface SchedulePageProps {
+  schedules?: Schedule[];
+  onScheduleUpdate?: (schedule: Schedule) => void;
+  className?: string;
+}
+
+// 商品選択UIProps
+export interface ProductSelectionUIProps {
+  apiUrl?: string;
+  maxProducts?: number;
+  onGenerate?: (products: Product[]) => void;
+  className?: string;
+}
+
+// ==================== ユーティリティ型 ====================
+
+// Nullable型
+export type Nullable<T> = T | null;
+
+// Optional型
+export type Optional<T> = T | undefined;
+
+// AsyncFunction型
+export type AsyncFunction<T = any> = () => Promise<T>;
+
+// ErrorHandler型
+export type ErrorHandler = (error: Error | unknown) => void;
+
+// ==================== 設定関連の型 ====================
+
+// Firebase設定
+export interface FirebaseConfig {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  storageBucket: string;
+  messagingSenderId: string;
+  appId: string;
+  measurementId?: string;
+}
+
+// WordPress設定
+export interface WordPressConfig {
+  url: string;
+  username: string;
+  password: string;
+  apiKey?: string;
+  categories?: Record<string, number>;
+}
+
+// API設定
+export interface APIConfig {
+  baseUrl: string;
+  apiKey?: string;
+  timeout?: number;
+  headers?: Record<string, string>;
+  retryCount?: number;
+  retryDelay?: number;
+}
+
+// ==================== 履歴管理の型 ====================
+
+// 投稿履歴
+export interface PostHistory {
+  posts: Post[];
+  totalCount: number;
+  successCount: number;
+  failedCount: number;
+  lastUpdated: string;
+}
+
+// 履歴フィルター
+export interface HistoryFilter {
+  status?: PostStatus;
+  category?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  searchTerm?: string;
+  limit?: number;
+  offset?: number;
+}
+
+// ==================== エラー関連の型 ====================
+
+// カスタムエラー
+export class AppError extends Error {
+  constructor(
+    message: string,
+    public code?: string,
+    public statusCode?: number,
+    public retryable: boolean = false,
+    public details?: any
+  ) {
+    super(message);
+    this.name = 'AppError';
+  }
+}
+
+// エラーレポート
+export interface ErrorReport {
+  error: Error | AppError;
+  context: {
+    component?: string;
+    action?: string;
+    userId?: string;
+    timestamp: string;
+  };
+  handled: boolean;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+}
+
+// ==================== バリデーション関連の型 ====================
+
+// バリデーションルール
+export interface ValidationRule<T = any> {
+  field: keyof T;
+  required?: boolean;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: RegExp;
+  custom?: (value: any) => boolean | string;
+  message?: string;
+}
+
+// バリデーション結果
+export interface ValidationResult {
+  valid: boolean;
+  errors: Record<string, string[]>;
+}
+
+// ==================== Export用のNamespace ====================
+

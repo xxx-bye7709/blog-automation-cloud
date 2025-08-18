@@ -1,0 +1,67 @@
+/* app/globals.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ダークモード/ライトモード切り替えのスムーズなトランジション */
+.light-theme {
+  transition: background-color 0.3s ease;
+}
+
+.dark-theme {
+  transition: background-color 0.3s ease;
+  background-color: #111827; /* gray-900 */
+  color: #f3f4f6; /* gray-100 */
+}
+
+/* カスタムスクロールバー */
+.dark-theme::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark-theme::-webkit-scrollbar-track {
+  background: #1f2937; /* gray-800 */
+}
+
+.dark-theme::-webkit-scrollbar-thumb {
+  background: #4b5563; /* gray-600 */
+  border-radius: 4px;
+}
+
+.dark-theme::-webkit-scrollbar-thumb:hover {
+  background: #6b7280; /* gray-500 */
+}
+
+.light-theme::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.light-theme::-webkit-scrollbar-track {
+  background: #f3f4f6; /* gray-100 */
+}
+
+.light-theme::-webkit-scrollbar-thumb {
+  background: #d1d5db; /* gray-300 */
+  border-radius: 4px;
+}
+
+.light-theme::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af; /* gray-400 */
+}
+
+/* グラデーション背景（既存のダッシュボード用） */
+.gradient-bg {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+/* カードのガラスモーフィズム効果 */
+.glass-effect {
+  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dark-theme .glass-effect {
+  background: rgba(0, 0, 0, 0.2);
+}
