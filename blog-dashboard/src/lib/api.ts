@@ -1,205 +1,191 @@
-// src/lib/api.ts
-// ダッシュボードのAPI通信サービス
+// src/lib/api.ts の改善版
 
-const FIREBASE_URL = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_URL || 
-  'https://asia-northeast1-blog-automation-system.cloudfunctions.net';
-
-// 型定義
 interface PostData {
-  title?: string;
-  postId?: string;
-  createdAt?: string;
-  [key: string]: unknown;
-}
-
-// APIレスポンス型定義
-export interface SystemMetrics {
-  todayCount: number;
-  monthCount: number;
-  totalCount: number;
-  successCount: number;
-  failedCount: number;
-  successRate: number;
-  systemStatus: 'online' | 'offline';
-  lastPost: PostData | null;
-  serverTime: string;
-  targets: {
-    daily: number;
-    monthly: number;
-  };
-}
-
-export interface GenerateResponse {
-  success: boolean;
-  postId?: string;
-  title?: string;
-  url?: string;
-  error?: string;
-  message?: string;
-  imageUrl?: string;
+  title: string;
+  content: string;
   category?: string;
-  duration?: string;
-  timestamp?: string;
-  attachmentId?: number;
-  focusKeyword?: string;
-  metaDescription?: string;
+  tags?: string[];
 }
 
-// APIクライアント
-class ApiService {
-  private baseUrl: string;
+interface ApiResponse {
+  success: boolean;
+  message?: string;
+  data?: any;
+  error?: string;
+}
 
-  constructor() {
-    this.baseUrl = FIREBASE_URL;
-    console.log('API Service initialized with URL:', this.baseUrl);
+// 投稿の重複を防ぐための管理
+const pendingRequests = new Map<string, boolean>();
+
+export async function generatePost(
+  endpoint: string,
+  data?: any,
+  options: {
+    timeout?: number;
+    retryCount?: number;
+  } = {}
+): Promise<ApiResponse> {
+  const { timeout = 25000, retryCount = 1 } = options; // タイムアウトを25秒に延長
+  const requestId = `${endpoint}-${Date.now()}`;
+  
+  // 重複リクエストのチェック
+  if (pendingRequests.has(endpoint)) {
+    console.log('Request already in progress for:', endpoint);
+    return {
+      success: false,
+      error: 'リクエストは既に処理中です。しばらくお待ちください。'
+    };
   }
 
-  // システムメトリクス取得
-  async getSystemMetrics(): Promise<SystemMetrics | null> {
-    try {
-      console.log('Fetching system metrics from:', `${this.baseUrl}/getSystemMetrics`);
-      
-      const response = await fetch(`${this.baseUrl}/getSystemMetrics`, {
-        method: 'GET',
+  pendingRequests.set(endpoint, true);
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_URL}${endpoint}`,
+      {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        mode: 'cors'
-      });
-
-      if (!response.ok) {
-        console.error('Failed to fetch metrics:', response.status, response.statusText);
-        return null;
+        body: data ? JSON.stringify(data) : undefined,
+        signal: controller.signal,
       }
+    );
 
-      const data = await response.json();
-      
-      if (data.success) {
-        console.log('Metrics received:', data.data);
-        return data.data;
-      }
-      
-      console.warn('Metrics response not successful:', data);
-      return null;
-    } catch (error) {
-      console.error('Error fetching system metrics:', error);
-      return null;
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-  }
 
-  // 記事生成
-  async generateArticle(category: string): Promise<GenerateResponse> {
-    try {
-      let endpoint = 'testBlogPost';
-      
-      // カテゴリー別エンドポイント
-      const categoryEndpoints: { [key: string]: string } = {
-        entertainment: 'generateEntertainmentArticle',
-        anime: 'generateAnimeArticle',
-        game: 'generateGameArticle',
-        movie: 'generateMovieArticle',
-        music: 'generateMusicArticle',
-        tech: 'generateTechArticle',
-        beauty: 'generateBeautyArticle',
-        food: 'generateFoodArticle',
-        random: 'generateRandomArticle'
-      };
+    const result = await response.json();
+    
+    // 成功をローカルストレージに記録（重複防止）
+    const recentPosts = JSON.parse(localStorage.getItem('recentPosts') || '[]');
+    recentPosts.push({
+      id: requestId,
+      endpoint,
+      timestamp: Date.now(),
+      title: result.title || 'Unknown'
+    });
+    
+    // 最新10件のみ保持
+    if (recentPosts.length > 10) {
+      recentPosts.shift();
+    }
+    localStorage.setItem('recentPosts', JSON.stringify(recentPosts));
 
-      if (categoryEndpoints[category]) {
-        endpoint = categoryEndpoints[category];
-      }
+    return {
+      success: true,
+      data: result,
+      message: '記事の生成に成功しました'
+    };
 
-      console.log(`Generating article: ${category} via ${endpoint}`);
-      console.log(`Full URL: ${this.baseUrl}/${endpoint}`);
-
-      const response = await fetch(`${this.baseUrl}/${endpoint}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        mode: 'cors'
-      });
-
-      if (!response.ok) {
-        console.error('Failed to generate article:', response.status, response.statusText);
-        return {
-          success: false,
-          error: `HTTP ${response.status}: ${response.statusText}`
-        };
-      }
-
-      const data = await response.json();
-      console.log('Article generation response:', data);
-      
-      return data;
-    } catch (error) {
-      console.error('Error generating article:', error);
+  } catch (error: any) {
+    console.error('API Error:', error);
+    
+    // タイムアウトエラーの場合
+    if (error.name === 'AbortError') {
+      // 実際には成功している可能性があるため、確認メッセージを表示
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: '処理に時間がかかっています。記事は生成される可能性があります。1-2分後に確認してください。',
+        data: { possibleSuccess: true }
       };
     }
-  }
-
-  // バッチ生成
-  async generateBatch(count: number, category?: string): Promise<GenerateResponse[]> {
-    const results: GenerateResponse[] = [];
     
-    console.log(`Starting batch generation: ${count} articles`);
+    // その他のエラー
+    return {
+      success: false,
+      error: error.message || 'エラーが発生しました'
+    };
     
-    for (let i = 0; i < count; i++) {
-      console.log(`Generating article ${i + 1}/${count}`);
-      const result = await this.generateArticle(category || 'random');
-      results.push(result);
-      
-      // 1秒待機（レート制限対策）
-      if (i < count - 1) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-    }
-    
-    const successCount = results.filter(r => r.success).length;
-    console.log(`Batch generation complete: ${successCount}/${count} successful`);
-    
-    return results;
-  }
-
-  // 投稿履歴取得（将来の実装用）
-  async getPostHistory(): Promise<PostData[]> {
-    try {
-      // TODO: Firebase Functionsに履歴取得エンドポイントを追加
-      console.log('Post history endpoint not yet implemented');
-      return [];
-    } catch (error) {
-      console.error('Error fetching post history:', error);
-      return [];
-    }
-  }
-
-  // テスト接続
-  async testConnection(): Promise<boolean> {
-    try {
-      console.log('Testing connection to Firebase Functions...');
-      const metrics = await this.getSystemMetrics();
-      if (metrics) {
-        console.log('✅ Connection successful!');
-        return true;
-      }
-      console.warn('⚠️ Connection established but no data received');
-      return false;
-    } catch (error) {
-      console.error('❌ Connection failed:', error);
-      return false;
-    }
+  } finally {
+    // リクエスト状態をクリア
+    setTimeout(() => {
+      pendingRequests.delete(endpoint);
+    }, 3000); // 3秒後にクリア
   }
 }
 
-// シングルトンインスタンス
-const apiService = new ApiService();
-
-// 初期接続テスト（開発時のみ）
-if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-  apiService.testConnection();
+// 最近の投稿をチェック（重複防止）
+export function checkRecentPost(endpoint: string, timeWindow: number = 60000): boolean {
+  const recentPosts = JSON.parse(localStorage.getItem('recentPosts') || '[]');
+  const now = Date.now();
+  
+  return recentPosts.some((post: any) => 
+    post.endpoint === endpoint && 
+    (now - post.timestamp) < timeWindow
+  );
 }
 
-export default apiService;
+// バッチ処理用の改善版
+export async function batchGeneratePosts(count: number): Promise<ApiResponse> {
+  try {
+    // バッチ処理は別途タイムアウトを設定
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_URL}/batchGeneratePosts?count=${count}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        // バッチ処理はタイムアウトを設定しない（Vercelの制限を回避できない）
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return {
+      success: true,
+      data: await response.json(),
+      message: `${count}件の記事生成を開始しました`
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: 'バッチ処理の開始に失敗しました。個別に生成してください。'
+    };
+  }
+}
+
+// メトリクス取得（これは高速なのでタイムアウト短め）
+export async function getSystemMetrics(): Promise<ApiResponse> {
+  try {
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_URL}/getSystemMetrics`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return {
+      success: true,
+      data: await response.json()
+    };
+  } catch (error: any) {
+    console.error('Metrics fetch error:', error);
+    return {
+      success: false,
+      error: 'メトリクスの取得に失敗しました',
+      data: {
+        totalPosts: 0,
+        todayPosts: 0,
+        successRate: 0,
+        categories: {}
+      }
+    };
+  }
+}
