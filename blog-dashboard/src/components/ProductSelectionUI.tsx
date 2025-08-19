@@ -55,10 +55,18 @@ const ProductSelectionUI: React.FC = () => {
     setSearchPerformed(true);
     
     try {
-      // Next.js APIルートを使用（CORSエラー回避）
-      const response = await fetch(
-        `/api/products/search?keyword=${encodeURIComponent(keyword)}&limit=20`
-      );
+      // APIルートをPOSTメソッドで呼び出す（CORSエラー回避）
+      const response = await fetch('/api/products/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          query: keyword,
+          limit: 20 
+        }),
+      });
+      
       const data = await response.json();
       
       if (data.success) {
@@ -105,7 +113,7 @@ const ProductSelectionUI: React.FC = () => {
     setSuccess('');
     
     try {
-      // Next.js APIルートを使用（CORSエラー回避）
+      // APIルートをPOSTメソッドで呼び出す
       const response = await fetch('/api/products/generate', {
         method: 'POST',
         headers: {
