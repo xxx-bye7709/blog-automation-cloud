@@ -2492,8 +2492,7 @@ ${products.map((p, index) => {
   </ul>
 </div>
 `;
-}
-
+  
 // index.jsの最後に以下の関数を追加してください
 
 // ========================================
@@ -2878,4 +2877,5 @@ function generateArticleContent(products, articleType, keyword) {
 `;
   
   return content;
+}
 }
