@@ -1,152 +1,92 @@
-// src/app/api/products/search/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
-const FIREBASE_URL = 'https://asia-northeast1-blog-automation-system.cloudfunctions.net';
+const FIREBASE_FUNCTIONS_URL = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_URL || 
+  'https://asia-northeast1-blog-automation-system.cloudfunctions.net';
 
-export async function GET(request: NextRequest) {
+export async function POST(request: NextRequest) {
+  console.log('=== API Route Called: /api/products/search ===');
+  
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const keyword = searchParams.get('keyword');
-    const limit = searchParams.get('limit') || '20';
+    // リクエストボディを取得
+    const body = await request.json();
+    console.log('Request body:', body);
+    
+    // Firebase Functions URLを構築
+    const firebaseUrl = `${FIREBASE_FUNCTIONS_URL}/searchProducts`;
+    console.log('Calling Firebase URL:', firebaseUrl);
+    
+    // Firebase Functionsにリクエストを送信
+    const response = await fetch(firebaseUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
 
-    if (!keyword) {
+    console.log('Firebase response status:', response.status);
+    
+    // レスポンスのテキストを取得
+    const responseText = await response.text();
+    console.log('Firebase response text:', responseText);
+
+    if (!response.ok) {
+      console.error('Firebase function error - Status:', response.status);
+      console.error('Firebase function error - Response:', responseText);
+      
+      // JSONとしてパースを試みる
+      let errorData;
+      try {
+        errorData = JSON.parse(responseText);
+      } catch (e) {
+        errorData = { error: responseText || `Firebase function error: ${response.status}` };
+      }
+      
       return NextResponse.json(
-        { success: false, error: 'キーワードが必要です' },
-        { status: 400 }
+        { 
+          success: false,
+          error: errorData.error || `Firebase function error: ${response.status}`,
+          details: errorData
+        },
+        { status: response.status }
       );
     }
 
-    // Firebase Functionsにリクエスト
-    const response = await fetch(
-      `${FIREBASE_URL}/searchProductsForDashboard?keyword=${encodeURIComponent(keyword)}&limit=${limit}`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
+    // 成功レスポンスをパース
+    let data;
+    try {
+      data = JSON.parse(responseText);
+      console.log('Parsed response data:', data);
+    } catch (e) {
+      console.error('Failed to parse successful response:', e);
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Invalid response format from Firebase' 
         },
-      }
-    );
-
-    const data = await response.json();
-    
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error('Search API error:', error);
-    return NextResponse.json(
-      { success: false, error: '検索エラーが発生しました' },
-      { status: 500 }
-    );
-  }
-}
-
-// src/app/api/products/generate/route.ts
-import { NextRequest, NextResponse } from 'next/server';
-
-const FIREBASE_URL = 'https://asia-northeast1-blog-automation-system.cloudfunctions.net';
-
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-
-    // Firebase Functionsにリクエスト
-    const response = await fetch(
-      `${FIREBASE_URL}/generateArticleFromDashboard`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      }
-    );
-
-    const data = await response.json();
-    
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error('Generate API error:', error);
-    return NextResponse.json(
-      { success: false, error: '記事生成エラーが発生しました' },
-      { status: 500 }
-    );
-  }
-}
-
-// src/app/api/posts/generate/route.ts
-import { NextRequest, NextResponse } from 'next/server';
-
-const FIREBASE_URL = 'https://asia-northeast1-blog-automation-system.cloudfunctions.net';
-
-export async function POST(request: NextRequest) {
-  try {
-    const { endpoint, data } = await request.json();
-    
-    const response = await fetch(
-      `${FIREBASE_URL}${endpoint}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: data ? JSON.stringify(data) : undefined,
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+        { status: 500 }
+      );
     }
 
-    const result = await response.json();
+    // 成功レスポンスを返す
+    return NextResponse.json({
+      success: true,
+      products: data.products || [],
+      ...data
+    });
     
-    return NextResponse.json({ success: true, data: result });
   } catch (error: any) {
-    console.error('Generate post error:', error);
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: error.message || 'エラーが発生しました' 
-      },
-      { status: 500 }
-    );
-  }
-}
-
-// src/app/api/metrics/route.ts
-import { NextResponse } from 'next/server';
-
-const FIREBASE_URL = 'https://asia-northeast1-blog-automation-system.cloudfunctions.net';
-
-export async function GET() {
-  try {
-    const response = await fetch(
-      `${FIREBASE_URL}/getSystemMetrics`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        cache: 'no-store',
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
+    console.error('=== API Route Error ===');
+    console.error('Error type:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
     
-    return NextResponse.json({ success: true, data });
-  } catch (error) {
-    console.error('Metrics fetch error:', error);
     return NextResponse.json(
       { 
         success: false,
-        data: {
-          totalPosts: 0,
-          todayPosts: 0,
-          successRate: 0,
-          categories: {}
-        }
+        error: error.message || 'Failed to search products',
+        errorType: error.name,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       },
       { status: 500 }
     );
