@@ -1,202 +1,254 @@
-// src/lib/api.ts - APIルート経由版（CORSエラー対策）
+// API通信用のユーティリティ関数
+// Next.js APIルート経由でFirebase Functionsにアクセス
 
-interface PostData {
-  title: string;
-  content: string;
-  category?: string;
-  tags?: string[];
-}
+const API_TIMEOUT = 25000; // 25秒のタイムアウト
 
-interface ApiResponse {
-  success: boolean;
-  message?: string;
-  data?: any;
-  error?: string;
-}
-
-// 投稿の重複を防ぐための管理
-const pendingRequests = new Map<string, boolean>();
-
-export async function generatePost(
-  endpoint: string,
-  data?: any,
-  options: {
-    timeout?: number;
-    retryCount?: number;
-  } = {}
-): Promise<ApiResponse> {
-  const { timeout = 25000, retryCount = 1 } = options;
-  const requestId = `${endpoint}-${Date.now()}`;
-  
-  // 重複リクエストのチェック
-  if (pendingRequests.has(endpoint)) {
-    console.log('Request already in progress for:', endpoint);
-    return {
-      success: false,
-      error: 'リクエストは既に処理中です。しばらくお待ちください。'
-    };
-  }
-
-  pendingRequests.set(endpoint, true);
+// 共通のfetch wrapper
+async function fetchWithTimeout(url: string, options: RequestInit = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT);
 
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-    // Next.js APIルート経由でリクエスト（CORSエラー回避）
-    const response = await fetch('/api/posts/generate', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ endpoint, data }),
+    const response = await fetch(url, {
+      ...options,
       signal: controller.signal,
     });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const result = await response.json();
-    
-    if (result.success) {
-      // 成功をローカルストレージに記録（重複防止）
-      const recentPosts = JSON.parse(localStorage.getItem('recentPosts') || '[]');
-      recentPosts.push({
-        id: requestId,
-        endpoint,
-        timestamp: Date.now(),
-        title: result.data?.title || 'Unknown'
-      });
-      
-      // 最新10件のみ保持
-      if (recentPosts.length > 10) {
-        recentPosts.shift();
-      }
-      localStorage.setItem('recentPosts', JSON.stringify(recentPosts));
-
-      return {
-        success: true,
-        data: result.data,
-        message: '記事の生成に成功しました'
-      };
-    } else {
-      return {
-        success: false,
-        error: result.error || 'エラーが発生しました'
-      };
-    }
-
+    clearTimeout(timeout);
+    return response;
   } catch (error: any) {
-    console.error('API Error:', error);
-    
-    // タイムアウトエラーの場合
+    clearTimeout(timeout);
     if (error.name === 'AbortError') {
-      return {
-        success: false,
-        error: '処理に時間がかかっています。記事は生成される可能性があります。1-2分後に確認してください。',
-        data: { possibleSuccess: true }
-      };
+      throw new Error('リクエストがタイムアウトしました。もう一度お試しください。');
     }
-    
-    // その他のエラー
-    return {
-      success: false,
-      error: error.message || 'エラーが発生しました'
-    };
-    
-  } finally {
-    // リクエスト状態をクリア
-    setTimeout(() => {
-      pendingRequests.delete(endpoint);
-    }, 3000);
+    throw error;
   }
 }
 
-// 最近の投稿をチェック（重複防止）
-export function checkRecentPost(endpoint: string, timeWindow: number = 60000): boolean {
-  const recentPosts = JSON.parse(localStorage.getItem('recentPosts') || '[]');
-  const now = Date.now();
-  
-  return recentPosts.some((post: any) => 
-    post.endpoint === endpoint && 
-    (now - post.timestamp) < timeWindow
-  );
-}
-
-// バッチ処理用の改善版
-export async function batchGeneratePosts(count: number): Promise<ApiResponse> {
+// 商品検索（APIルート経由）
+export async function searchProducts(query: string) {
   try {
-    const response = await fetch('/api/posts/generate', {
+    const response = await fetchWithTimeout('/api/products/search', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        endpoint: `/batchGeneratePosts?count=${count}`,
-        data: null
-      }),
+      body: JSON.stringify({ query }),
     });
 
+    const text = await response.text();
+    
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      let error;
+      try {
+        error = JSON.parse(text);
+      } catch {
+        error = { error: text || 'Unknown error' };
+      }
+      throw new Error(error.error || `検索に失敗しました: ${response.status}`);
     }
 
-    const result = await response.json();
-    
-    return {
-      success: result.success,
-      data: result.data,
-      message: result.success ? `${count}件の記事生成を開始しました` : undefined,
-      error: result.error
-    };
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error('サーバーからの応答が不正です');
+    }
   } catch (error: any) {
-    return {
-      success: false,
-      error: 'バッチ処理の開始に失敗しました。個別に生成してください。'
-    };
+    console.error('商品検索エラー:', error);
+    throw new Error(error.message || '商品検索に失敗しました');
+  }
+}
+
+// 商品記事生成（APIルート経由）
+export async function generateProductArticle(productData: any) {
+  try {
+    const response = await fetchWithTimeout('/api/products/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(productData),
+    });
+
+    const text = await response.text();
+    
+    if (!response.ok) {
+      let error;
+      try {
+        error = JSON.parse(text);
+      } catch {
+        error = { error: text || 'Unknown error' };
+      }
+      throw new Error(error.error || `記事生成に失敗しました: ${response.status}`);
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error('サーバーからの応答が不正です');
+    }
+  } catch (error: any) {
+    console.error('記事生成エラー:', error);
+    throw new Error(error.message || '記事生成に失敗しました');
+  }
+}
+
+// ダッシュボード用記事生成（APIルート経由）
+export async function generateArticle(topic: string, keywords: string[]) {
+  try {
+    const response = await fetchWithTimeout('/api/posts/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ topic, keywords }),
+    });
+
+    const text = await response.text();
+    
+    if (!response.ok) {
+      let error;
+      try {
+        error = JSON.parse(text);
+      } catch {
+        error = { error: text || 'Unknown error' };
+      }
+      throw new Error(error.error || `記事生成に失敗しました: ${response.status}`);
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error('サーバーからの応答が不正です');
+    }
+  } catch (error: any) {
+    console.error('記事生成エラー:', error);
+    throw new Error(error.message || '記事生成に失敗しました');
   }
 }
 
 // メトリクス取得（APIルート経由）
-export async function getSystemMetrics(): Promise<ApiResponse> {
+export async function fetchMetrics() {
   try {
-    const response = await fetch('/api/metrics', {
+    const response = await fetchWithTimeout('/api/metrics', {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      cache: 'no-store',
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw new Error(`メトリクス取得に失敗しました: ${response.status}`);
     }
 
-    const result = await response.json();
-    
-    return {
-      success: result.success,
-      data: result.data || {
-        totalPosts: 0,
-        todayPosts: 0,
-        successRate: 0,
-        categories: {}
-      }
-    };
+    return await response.json();
   } catch (error: any) {
-    console.error('Metrics fetch error:', error);
+    console.error('メトリクス取得エラー:', error);
+    // エラー時はデフォルト値を返す
     return {
-      success: false,
-      error: 'メトリクスの取得に失敗しました',
-      data: {
-        totalPosts: 0,
-        todayPosts: 0,
-        successRate: 0,
-        categories: {}
-      }
+      totalPosts: 0,
+      monthlyPosts: 0,
+      weeklyPosts: 0,
+      scheduledPosts: 0,
+      categories: []
     };
+  }
+}
+
+// スケジュール取得（APIルート経由）
+export async function getScheduleStatus() {
+  try {
+    const response = await fetchWithTimeout('/api/schedule/get', {
+      method: 'GET',
+    });
+
+    if (!response.ok) {
+      throw new Error(`スケジュール取得に失敗しました: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error: any) {
+    console.error('スケジュール取得エラー:', error);
+    // エラー時はデフォルト値を返す
+    return {
+      enabled: false,
+      schedule: '10:00',
+      lastRun: null,
+      nextRun: null
+    };
+  }
+}
+
+// スケジュール設定（APIルート経由）
+export async function setSchedule(schedule: string) {
+  try {
+    const response = await fetchWithTimeout('/api/schedule/set', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ schedule }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`スケジュール設定に失敗しました: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error: any) {
+    console.error('スケジュール設定エラー:', error);
+    throw new Error(error.message || 'スケジュール設定に失敗しました');
+  }
+}
+
+// スケジュール有効/無効切り替え（APIルート経由）
+export async function toggleSchedule(enabled: boolean) {
+  try {
+    const response = await fetchWithTimeout('/api/schedule/toggle', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ enabled }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`スケジュール切り替えに失敗しました: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error: any) {
+    console.error('スケジュール切り替えエラー:', error);
+    throw new Error(error.message || 'スケジュール切り替えに失敗しました');
+  }
+}
+
+// スケジュール手動実行（APIルート経由）
+export async function runScheduledPost() {
+  try {
+    const response = await fetchWithTimeout('/api/schedule/run', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+
+    const text = await response.text();
+    
+    if (!response.ok) {
+      let error;
+      try {
+        error = JSON.parse(text);
+      } catch {
+        error = { error: text || 'Unknown error' };
+      }
+      throw new Error(error.error || `手動実行に失敗しました: ${response.status}`);
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error('サーバーからの応答が不正です');
+    }
+  } catch (error: any) {
+    console.error('手動実行エラー:', error);
+    throw new Error(error.message || '手動実行に失敗しました');
   }
 }
