@@ -5,7 +5,8 @@ const FIREBASE_URL = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_URL ||
 
 export async function GET() {
   try {
-    const response = await fetch(`${FIREBASE_URL}/getStats`, {
+    // getSystemMetricsまたはgetStats
+    const response = await fetch(`${FIREBASE_URL}/getSystemMetrics`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -17,12 +18,19 @@ export async function GET() {
     }
 
     const data = await response.json();
+    console.log('Metrics data:', data);
+    
     return NextResponse.json(data);
   } catch (error: any) {
     console.error('Metrics API error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to fetch metrics' },
-      { status: 500 }
-    );
+    // デフォルト値を返す
+    return NextResponse.json({
+      todayCount: 0,
+      weekCount: 0,
+      monthCount: 0,
+      totalCount: 0,
+      lastPost: null,
+      systemStatus: 'error'
+    });
   }
 }

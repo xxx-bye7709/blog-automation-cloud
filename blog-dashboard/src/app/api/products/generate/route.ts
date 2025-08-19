@@ -1,49 +1,67 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
-const FIREBASE_FUNCTIONS_URL = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_URL || 
+const FIREBASE_URL = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_URL || 
   'https://asia-northeast1-blog-automation-system.cloudfunctions.net';
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
+  console.log('=== Product Generate API Called ===');
+  
   try {
     const body = await request.json();
+    console.log('Request body:', JSON.stringify(body, null, 2));
     
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    // productIdを追加（DMMの場合はcontent_idを使用）
+    const requestData = {
+      ...body,
+      productId: body.productId || body.products?.[0]?.content_id || 'manual-review',
+      source: body.source || 'dmm',
+      autoPost: true // WordPress自動投稿を有効化
+    };
     
-    const response = await fetch(`${FIREBASE_FUNCTIONS_URL}/generateProductArticle`, {
+    const firebaseUrl = `${FIREBASE_URL}/generateProductReview`;
+    console.log('Calling Firebase URL:', firebaseUrl);
+    console.log('Request data:', requestData);
+    
+    const response = await fetch(firebaseUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(body),
-      signal: controller.signal,
+      body: JSON.stringify(requestData),
     });
 
-    clearTimeout(timeout);
+    const responseText = await response.text();
+    console.log('Firebase status:', response.status);
+    console.log('Firebase response:', responseText.substring(0, 500));
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Firebase function error:', errorText);
-      return NextResponse.json(
-        { error: `Firebase function error: ${response.status}` },
-        { status: response.status }
-      );
+      throw new Error(`Firebase error: ${response.status} - ${responseText}`);
     }
 
-    const data = await response.json();
-    return NextResponse.json(data);
-  } catch (error: any) {
-    console.error('Article generation error:', error);
-    
-    if (error.name === 'AbortError') {
-      return NextResponse.json(
-        { error: 'Request timeout - 記事生成に時間がかかっています。しばらくしてから再度お試しください。' },
-        { status: 504 }
-      );
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      data = { message: responseText, success: true };
     }
-    
+
+    // WordPressへの投稿確認
+    if (data.postId) {
+      console.log('✅ WordPress Post ID:', data.postId);
+    }
+
+    return NextResponse.json({
+      success: true,
+      ...data
+    });
+  } catch (error: any) {
+    console.error('❌ Generate API Error:', error);
     return NextResponse.json(
-      { error: 'Failed to generate article' },
+      { 
+        success: false,
+        error: error.message,
+        details: error.toString()
+      },
       { status: 500 }
     );
   }
