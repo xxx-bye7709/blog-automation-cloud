@@ -1,25 +1,18 @@
 {
   "functions": {
-    "src/app/**/*.tsx": {
-      "maxDuration": 10
+    "src/app/api/posts/generate/route.ts": {
+      "maxDuration": 60
     },
-    "src/app/api/**/*.ts": {
-      "maxDuration": 10
+    "src/app/api/products/generate/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/schedule/run/route.ts": {
+      "maxDuration": 60
     }
   },
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
-        },
-        {
-          "key": "X-Frame-Options",
-          "value": "SAMEORIGIN"
-        }
-      ]
-    }
-  ]
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "regions": ["sin1"]
 }
