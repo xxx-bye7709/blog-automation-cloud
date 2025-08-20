@@ -1,18 +1,15 @@
 {
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "outputDirectory": ".next",
   "functions": {
     "src/app/api/posts/generate/route.ts": {
       "maxDuration": 60
     },
     "src/app/api/products/generate/route.ts": {
       "maxDuration": 60
-    },
-    "src/app/api/schedule/run/route.ts": {
-      "maxDuration": 60
     }
-  },
-  "framework": "nextjs",
-  "buildCommand": "npm run build",
-  "devCommand": "npm run dev",
-  "installCommand": "npm install",
-  "regions": ["sin1"]
+  }
 }

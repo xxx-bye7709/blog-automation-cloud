@@ -1,3 +1,5 @@
+// blog-dashboard/src/app/api/products/generate/route.ts
+
 import { NextResponse } from 'next/server';
 
 const FIREBASE_URL = process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_URL || 
@@ -10,12 +12,19 @@ export async function POST(request: Request) {
     const body = await request.json();
     console.log('Request body:', JSON.stringify(body, null, 2));
     
-    // productIdを追加（DMMの場合はcontent_idを使用）
+    // Firebase Functionsに送信するデータを準備
     const requestData = {
-      ...body,
-      productId: body.productId || body.products?.[0]?.content_id || 'manual-review',
-      source: body.source || 'dmm',
-      autoPost: true // WordPress自動投稿を有効化
+      productId: body.productId || 'manual-review',
+      keyword: body.keyword || body.products?.[0]?.title || 'レビュー',
+      autoPost: true, // 常にWordPressに投稿
+      productData: {
+        title: body.products?.[0]?.title || body.title || 'テスト商品',
+        description: body.products?.[0]?.description || body.description || '',
+        price: body.products?.[0]?.price || body.price || '価格未定',
+        category: body.category || 'レビュー',
+        features: body.products?.[0]?.features || '',
+        rating: body.products?.[0]?.rating || 4.0
+      }
     };
     
     const firebaseUrl = `${FIREBASE_URL}/generateProductReview`;
@@ -35,34 +44,55 @@ export async function POST(request: Request) {
     console.log('Firebase response:', responseText.substring(0, 500));
 
     if (!response.ok) {
-      throw new Error(`Firebase error: ${response.status} - ${responseText}`);
+      // エラーレスポンスでもテキストを返す
+      console.error('Firebase error:', responseText);
+      return NextResponse.json({
+        success: false,
+        error: `Firebase error: ${response.status}`,
+        details: responseText.substring(0, 200)
+      }, { status: 500 });
     }
 
     let data;
     try {
       data = JSON.parse(responseText);
-    } catch {
-      data = { message: responseText, success: true };
+    } catch (e) {
+      // JSONパースエラーの場合もエラーとして扱う
+      console.error('JSON parse error:', e);
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid response from Firebase',
+        details: responseText.substring(0, 200)
+      }, { status: 500 });
     }
 
     // WordPressへの投稿確認
     if (data.postId) {
       console.log('✅ WordPress Post ID:', data.postId);
+      console.log('✅ WordPress URL:', data.postUrl);
     }
 
     return NextResponse.json({
       success: true,
       ...data
     });
-  } catch (error: any) {
-    console.error('❌ Generate API Error:', error);
-    return NextResponse.json(
-      { 
-        success: false,
-        error: error.message,
-        details: error.toString()
-      },
-      { status: 500 }
-    );
+
+  } catch (error) {
+    console.error('API Route Error:', error);
+    return NextResponse.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }, { status: 500 });
   }
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  });
 }
