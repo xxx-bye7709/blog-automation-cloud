@@ -1,11 +1,11 @@
-'use client';
-
 import ProductSelectionUI from '@/components/ProductSelectionUI';
 
 export default function ProductsPage() {
   return (
-    <main className="min-h-screen bg-gray-50">
-      <ProductSelectionUI />
-    </main>
+    <div className="min-h-screen bg-gray-100">
+      <div className="container mx-auto py-8">
+        <ProductSelectionUI />
+      </div>
+    </div>
   );
 }
