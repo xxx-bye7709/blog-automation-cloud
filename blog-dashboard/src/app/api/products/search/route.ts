@@ -1,5 +1,4 @@
-// blog-dashboard/src/app/api/products/search/route.ts
-// DMM APIからのデータを正しく処理
+// src/app/api/products/search/route.ts
 
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -11,11 +10,17 @@ export async function GET(req: NextRequest) {
 
     console.log('Searching products with query:', query);
 
-    // Firebase FunctionsのsearchProducts APIを呼び出し
+    // GETリクエストでクエリパラメータとして送信
+    const params = new URLSearchParams({
+      keyword: query,
+      limit: limit,
+      page: '1'
+    });
+    
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_URL}/searchProducts?keyword=${encodeURIComponent(query)}&hits=${limit}`,
+      `${process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_URL}/searchProductsForDashboard?${params}`,
       {
-        method: 'GET',
+        method: 'GET',  // GETメソッドに変更
         headers: {
           'Content-Type': 'application/json'
         }
@@ -23,12 +28,14 @@ export async function GET(req: NextRequest) {
     );
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Search API error:', errorText);
       throw new Error(`Search failed: ${response.statusText}`);
     }
 
     const data = await response.json();
     
-    // DMM APIのレスポンスを正規化
+    // レスポンスを正規化
     const products = data.products?.map((product: any) => ({
       id: product.content_id || product.cid || Math.random().toString(36),
       title: product.title || '',
@@ -40,16 +47,10 @@ export async function GET(req: NextRequest) {
         small: product.imageURL?.small || ''
       },
       description: product.iteminfo?.series?.[0]?.name || 
-                  product.iteminfo?.genre?.[0]?.name || 
-                  '',
+                  product.iteminfo?.genre?.[0]?.name || '',
       rating: product.review?.average || '4.5',
-      reviewCount: product.review?.count || 0,
-      maker: product.iteminfo?.maker?.[0]?.name || '',
-      genre: product.iteminfo?.genre?.map((g: any) => g.name).join(', ') || ''
+      maker: product.iteminfo?.maker?.[0]?.name || ''
     })) || [];
-
-    console.log(`Found ${products.length} products`);
-    console.log('Sample product:', products[0]);
 
     return NextResponse.json({
       success: true,
