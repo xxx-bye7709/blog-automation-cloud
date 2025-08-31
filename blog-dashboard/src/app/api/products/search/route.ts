@@ -37,15 +37,15 @@ export async function GET(req: NextRequest) {
     
     // レスポンスを正規化
     const products = data.products?.map((product: any) => ({
-      id: product.content_id || product.cid || Math.random().toString(36),
-      title: product.title || '',
-      price: product.prices?.price || product.price || '価格不明',
-      affiliateURL: product.affiliateURL || product.affiliateUrl || '',
-      URL: product.URL || '',
-      imageURL: {
-        large: product.imageURL?.large || '',
-        small: product.imageURL?.small || ''
-      },
+  id: product.content_id || product.cid || Math.random().toString(36),
+  title: product.title || '',
+  price: product.prices?.price || product.price || '価格不明',
+  affiliateURL: product.affiliateURL || product.affiliateUrl || '',
+  URL: product.URL || '',
+  imageURL: {
+    large: product.imageUrl || product.imageURL?.large || '',  // imageUrlを追加
+    small: product.thumbnailUrl || product.imageURL?.small || ''  // thumbnailUrlを追加
+  },
       description: product.iteminfo?.series?.[0]?.name || 
                   product.iteminfo?.genre?.[0]?.name || '',
       rating: product.review?.average || '4.5',
