@@ -1712,135 +1712,221 @@ exports.searchProducts = functions
  */
 exports.generateProductReview = functions
   .region('asia-northeast1')
-  .runWith({ timeoutSeconds: 540, memory: '2GB' })
+  .runWith({
+    timeoutSeconds: 540,
+    memory: '2GB'
+  })
   .https.onRequest(async (req, res) => {
-    cors(req, res, async () => {
-      try {
-        const BlogAutomationTool = require('./lib/blog-tool');
-        const DMMApi = require('./lib/dmm-api');
-        
-        const { productId } = req.body;
-        
-        if (!productId) {
-          return res.status(400).json({ 
-            success: false, 
-            error: 'productId is required' 
-          });
-        }
+    console.log('=== generateProductReview START ===');
+    
+    // CORS設定
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    res.set('Content-Type', 'application/json; charset=utf-8');
+    
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
 
-        const dmmApi = new DMMApi();
-        
-        // 商品詳細取得
-        const productData = await dmmApi.prepareReviewData(productId);
-        
-        if (!productData) {
-          return res.status(404).json({ 
-            success: false, 
-            error: 'Product not found' 
-          });
-        }
+    try {
+      const BlogTool = require('./lib/blog-tool');
+      const blogTool = new BlogTool();
+      
+      const requestData = req.body || {};
+      
+      const {
+        products = [],  // ⭐ 複数商品配列に変更
+        keyword = 'レビュー',
+        autoPost = true
+      } = requestData;
 
-        // BlogTool初期化
-        const blogTool = new BlogAutomationTool();
-        
-        // レビュー記事生成
-        const review = await blogTool.generateProductReviewArticle(productData);
+      // 後方互換性のため、productsToProcess[0]?も確認
+      const productsToProcess = products.length > 0 ? products : 
+                         requestData.product ? [requestData.product] : [];
 
-        // アフィリエイトリンクを含む完全な記事を生成
-        const fullContent = `
-${review.introduction}
-
-<div class="product-info">
-${dmmApi.generateProductHtml(productData, 'card')}
-</div>
-
-${review.features}
-
-${review.prosAndCons}
-
-${review.conclusion}
-
-<div class="product-cta">
-${dmmApi.generateProductHtml(productData, 'button')}
-</div>
-        `;
-
-        // WordPressに投稿
-        const wpResponse = await blogTool.postToWordPress(
-          review.title,
-          fullContent,
-          'review',
-          ['商品レビュー', productData.genre, productData.maker]
+      console.log(`📦 Processing ${productsToProcess.length} products`);
+      
+      console.log('Product data received:', {
+  hasTitle: !!productsToProcess[0]?.title,
+  hasPrice: !!productsToProcess[0]?.price,
+  hasImageUrl: !!productsToProcess[0]?.imageUrl,
+  hasAffiliateUrl: !!productsToProcess[0]?.affiliateUrl
+});
+      
+      // 記事生成
+      const article = await blogTool.generateProductReview(
+        productsToProcess,  // 配列を渡す
+          keyword,
+          { autoPost }
         );
-
-        res.json({
-          success: true,
-          postId: wpResponse.id,
-          url: wpResponse.link,
-          title: review.title,
-          product: {
-            name: productData.title,
-            price: productData.price,
-            rating: productData.rating,
-            affiliateUrl: productData.affiliateUrl
-          }
+      
+      // ★強化されたクリーンアップ処理
+      if (article.content) {
+        // 不要なテキストパターンを削除
+        const unwantedPatterns = [
+          /\*\*この.*?ください。?\*\*/gi,
+          /このHTML.*?ください。?/gi,
+          /このコード.*?ください。?/gi,
+          /ぜひご活用ください。?/gi,
+          /上記.*?ください。?/gi,
+          /```html\n?/gi,
+          /```\n?/gi
+        ];
+        
+        unwantedPatterns.forEach(pattern => {
+          article.content = article.content.replace(pattern, '');
         });
-      } catch (error) {
-        console.error('Error:', error);
-        res.status(500).json({ 
-          success: false, 
-          error: error.message 
-        });
+        
+        // 空白の正規化
+        article.content = article.content
+          .replace(/\n{3,}/g, '\n\n')  // 3つ以上の改行を2つに
+          .replace(/^\n+/, '')          // 先頭の改行を削除
+          .replace(/\n+$/, '')          // 末尾の改行を削除
+          .replace(/^[ \t]+$/gm, '')    // 空白のみの行を削除
+          .trim();
       }
-    });
-  });
+      
+      // ★画像URLが存在する場合のみ画像を挿入
+      const imageUrl = productsToProcess[0]?.imageUrl || productsToProcess[0]?.imageURL || productsToProcess[0]?.image;  // ← 修正！
+if (imageUrl) {
+  console.log('Inserting image:', imageUrl);
+  
+  const imageHtml = `
+<div class="product-main-image" style="text-align: center; margin: 30px 0;">
+  <img src="${imageUrl}" alt="${productsToProcess[0]?.title || keyword}" 
+       style="max-width: 600px; width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+</div>`;
+        
+        // 最初の</h2>タグの後に画像を挿入
+        const h2End = article.content.indexOf('</h2>');
+        if (h2End !== -1) {
+          article.content = 
+            article.content.slice(0, h2End + 5) + 
+            imageHtml + 
+            article.content.slice(h2End + 5);
+        } else {
+          // h2がない場合は最初に追加
+          article.content = imageHtml + '\n\n' + article.content;
+        }
+      } else {
+        console.log('⚠️ No image URL provided');
+      }
+      
+      // ★アフィリエイトボタン（複数箇所に配置）
+      const affiliateUrl = productsToProcess[0]?.affiliateUrl || productsToProcess[0]?.affiliateURL || productsToProcess[0]?.url;
+      if (affiliateUrl) {
+        // 記事中央のボタン
+        const midButtonHtml = `
+<div class="affiliate-button-wrapper" style="text-align: center; margin: 35px 0; padding: 20px; background: linear-gradient(135deg, #fff9e6 0%, #ffeb99 100%); border-radius: 12px;">
+  <p style="margin-bottom: 15px; font-size: 16px; color: #666;">＼ 今すぐチェック ／</p>
+  <a href="${affiliateUrl}" 
+     class="affiliate-button" 
+     target="_blank" 
+     rel="noopener noreferrer"
+     style="display: inline-block; 
+            padding: 18px 50px; 
+            background: linear-gradient(45deg, #ff6b6b, #ff5252); 
+            color: white; 
+            text-decoration: none; 
+            border-radius: 50px; 
+            font-size: 20px; 
+            font-weight: bold; 
+            box-shadow: 0 6px 20px rgba(255,107,107,0.4);
+            transition: all 0.3s;">
+    🎬 詳細を見る
+  </a>
+</div>`;
 
-/**
- * DMM API設定デバッグ
- */
-exports.debugDMM = functions
-  .region('asia-northeast1')
-  .https.onRequest(async (req, res) => {
-    cors(req, res, async () => {
-      try {
-        const DMMApi = require('./lib/dmm-api');
-        const dmmApi = new DMMApi();
+        // 記事最後のボタン
+        const bottomButtonHtml = `
+<div class="affiliate-button-wrapper" style="text-align: center; margin: 45px 0; padding: 30px; background: linear-gradient(135deg, #e6f7ff 0%, #bae7ff 100%); border-radius: 12px; border: 2px solid #1890ff;">
+  <h3 style="color: #0050b3; margin-bottom: 10px;">気になった方はこちら</h3>
+  <p style="margin-bottom: 20px; color: #666;">セール情報や在庫状況もチェックできます</p>
+  <a href="${affiliateUrl}" 
+     class="affiliate-button" 
+     target="_blank" 
+     rel="noopener noreferrer"
+     style="display: inline-block; 
+            padding: 20px 60px; 
+            background: linear-gradient(45deg, #4CAF50, #45a049); 
+            color: white; 
+            text-decoration: none; 
+            border-radius: 50px; 
+            font-size: 22px; 
+            font-weight: bold; 
+            box-shadow: 0 8px 25px rgba(76,175,80,0.35);
+            transition: all 0.3s;">
+    🛒 商品ページへ
+  </a>
+  <p style="margin-top: 15px; font-size: 12px; color: #999;">※在庫切れの場合があります</p>
+</div>`;
         
-        // 環境変数の状態を確認（値は一部隠す）
-        const apiIdStatus = process.env.DMM_API_ID ? 
-          `Set (${process.env.DMM_API_ID.substring(0, 4)}...)` : 'NOT SET';
-        const affiliateIdStatus = process.env.DMM_AFFILIATE_ID || 'NOT SET';
-        
-        // テストリクエスト
-        const axios = require('axios');
-        let testResult = 'Not tested';
-        
-        if (process.env.DMM_API_ID && process.env.DMM_AFFILIATE_ID) {
-          try {
-            const testUrl = `https://api.dmm.com/affiliate/v3/ItemList?api_id=${process.env.DMM_API_ID}&affiliate_id=${process.env.DMM_AFFILIATE_ID}&hits=1&keyword=test&output=json`;
-            const response = await axios.get(testUrl);
-            testResult = response.data?.result ? 'API Connected' : 'API Error: ' + JSON.stringify(response.data);
-          } catch (error) {
-            testResult = `Connection Error: ${error.message}`;
-          }
+        // 記事の中間地点にボタンを挿入
+        const midPoint = Math.floor(article.content.length / 2);
+        const nearestParagraph = article.content.indexOf('</p>', midPoint);
+        if (nearestParagraph !== -1) {
+          article.content = 
+            article.content.slice(0, nearestParagraph + 4) + 
+            midButtonHtml + 
+            article.content.slice(nearestParagraph + 4);
         }
         
-        res.json({
-          success: true,
-          config: {
-            DMM_API_ID: apiIdStatus,
-            DMM_AFFILIATE_ID: affiliateIdStatus,
-            baseUrl: 'https://api.dmm.com/affiliate/v3'
-          },
-          testResult: testResult
-        });
-      } catch (error) {
-        res.status(500).json({ 
-          success: false, 
-          error: error.message 
-        });
+        // 最後にボタンを追加
+        article.content += bottomButtonHtml;
       }
-    });
+      
+      // ★アイキャッチ画像の設定（WordPressメタデータ用）
+      if (imageUrl) {
+        article.featuredImage = imageUrl;
+      }
+      
+      // タグ・カテゴリの設定
+      article.category = productsToProcess[0].category || 'products';
+      article.tags = [keyword, productsToProcess[0].genre, productsToProcess[0].maker].filter(Boolean);
+      
+      console.log('Article processed:', {
+        title: article.title,
+        contentLength: article.content?.length,
+        hasImage: !!imageUrl,
+        hasButton: !!affiliateUrl,
+        hasFeaturedImage: !!article.featuredImage
+      });
+      
+      // WordPressに投稿
+      let postResult = { success: false };
+      
+      if (autoPost) {
+        console.log('Auto-posting to WordPress...');
+        postResult = await blogTool.postToWordPress(article);
+        console.log('Post result:', postResult);
+      }
+      
+      // レスポンス作成
+      const response = {
+        success: true,
+        title: article.title,
+        keyword: keyword,
+        productId: productId,
+        postId: postResult.postId || null,
+        postUrl: postResult.url || null,
+        postSuccess: postResult.success || false,
+        hasImage: !!imageUrl,
+        message: postResult.success ? 'Posted successfully' : 'Article generated but posting failed',
+        postError: postResult.error || null
+      };
+      
+      console.log('=== generateProductReview END ===');
+      res.json(response);
+      
+    } catch (error) {
+      console.error('Error in generateProductReview:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Unknown error'
+      });
+    }
   });
 
 // index.js の最後に追加するシンプルなテスト関数
@@ -2391,6 +2477,7 @@ ${p.description}
   });
 
 // ===== 3. ヘルパー関数: 商品セクションHTML生成 =====
+// index.js の generateProductSection 関数を修正（1834行目付近）
 function generateProductSection(products, articleType) {
   const sectionTitle = articleType === 'ranking' 
     ? '🏆 ランキング詳細' 
@@ -2414,24 +2501,28 @@ ${products.map((p, index) => {
     ? '#CD7F32'
     : '#4CAF50';
   
+  // ★修正: affiliateUrlの存在チェックを追加
+  const affiliateUrl = p.affiliateUrl || p.affiliateURL || p.url || '#';
+  const imageUrl = p.imageUrl || p.imageURL || p.thumbnailUrl || '';
+  
   return `
 <div class="product-item" style="margin-bottom: 30px; padding: 25px; border: 3px solid ${borderColor}; border-radius: 12px; background: linear-gradient(135deg, #ffffff 0%, #f9f9f9 100%); position: relative; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
   ${rankBadge}
   <div style="display: flex; gap: 20px; ${articleType === 'ranking' && index < 3 ? 'margin-left: 20px;' : ''}">
-    ${p.imageUrl ? `
+    ${imageUrl ? `
     <div style="flex-shrink: 0;">
-      <img src="${p.imageUrl}" alt="${p.title}" style="max-width: 220px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+      <img src="${imageUrl}" alt="${p.title || ''}" style="max-width: 220px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
     </div>
     ` : ''}
     <div style="flex-grow: 1;">
       <h3 style="margin-top: 0; color: #333; font-size: 1.3em; line-height: 1.4;">
         ${articleType === 'ranking' ? `【第${index + 1}位】` : `【Pick ${index + 1}】`}
-        ${p.title}
+        ${p.title || '商品名不明'}
       </h3>
       
       <div style="display: flex; align-items: center; gap: 20px; margin: 15px 0;">
         <span style="font-size: 1.5em; color: #ff4444; font-weight: bold;">
-          💰 ${p.price}
+          💰 ${p.price || '価格不明'}
         </span>
         ${p.listPrice && p.listPrice !== p.price ? `
         <span style="text-decoration: line-through; color: #999;">
@@ -2440,13 +2531,13 @@ ${products.map((p, index) => {
         ` : ''}
       </div>
       
-      ${p.rating > 0 ? `
+      ${p.rating && p.rating > 0 ? `
       <div style="margin: 10px 0;">
         <span style="color: #FFA500; font-size: 1.1em;">
           ${'⭐'.repeat(Math.round(p.rating))} ${p.rating}/5.0
         </span>
         <span style="color: #666; margin-left: 10px;">
-          (${p.reviewCount}件のレビュー)
+          (${p.reviewCount || 0}件のレビュー)
         </span>
       </div>
       ` : ''}
@@ -2467,7 +2558,7 @@ ${products.map((p, index) => {
       ` : ''}
       
       <div style="margin-top: 20px;">
-        <a href="${p.affiliateUrl}" target="_blank" rel="noopener noreferrer" 
+        <a href="${affiliateUrl}" target="_blank" rel="noopener noreferrer" 
            style="display: inline-block; padding: 14px 40px; background: linear-gradient(45deg, ${borderColor}, ${borderColor}dd); 
                   color: white; text-decoration: none; border-radius: 30px; 
                   font-weight: bold; font-size: 1.1em; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
@@ -2723,6 +2814,11 @@ exports.generatePost = functions
       res.status(204).send('');
       return;
     }
+// POSTメソッドのみ許可
+    if (req.method !== 'POST') {
+      res.status(405).send('Method Not Allowed');
+      return;
+    }
 
     try {
       console.log('generatePost called:', req.body);
@@ -2794,6 +2890,67 @@ exports.runScheduledPost = functions
           error: 'Method not allowed. Use POST.'
         });
       }
+
+      // index.js に追加
+exports.testSimplePost = functions
+  .region('asia-northeast1')
+  .https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    
+    try {
+      const BlogTool = require('./lib/blog-tool');
+      const blogTool = new BlogTool();
+      
+      const simpleArticle = {
+        title: "Test Post " + Date.now(),
+        content: "<p>Simple test content</p>",
+        category: "test",
+        tags: ["test"],
+        isProductReview: false
+      };
+      
+      const result = await blogTool.postToWordPress(simpleArticle);
+      
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        error: error.message 
+      });
+    }
+  });
+
+      //シンプルなテスト関数を追加
+      exports.debugBlogTool = functions
+  .region('asia-northeast1')
+  .https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    
+    try {
+      console.log('Starting BlogTool debug...');
+      const BlogTool = require('./lib/blog-tool');
+      console.log('BlogTool loaded');
+      
+      const config = functions.config();
+      console.log('Firebase config:', JSON.stringify(config.wordpress || {}, null, 2));
+      
+      const blogTool = new BlogTool();
+      console.log('BlogTool instantiated');
+      
+      res.json({
+        success: true,
+        wordpressUrl: blogTool.wordpressUrl,
+        hasUser: !!blogTool.wordpressUser,
+        hasPassword: !!blogTool.wordpressPassword
+      });
+    } catch (error) {
+      console.error('Debug error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
 
       // カテゴリーをランダムに選択
       const categories = ['entertainment', 'anime', 'game', 'movie', 'music', 'tech', 'beauty', 'food'];
@@ -2878,4 +3035,74 @@ function generateArticleContent(products, articleType, keyword) {
   
   return content;
 }
-}
+
+  // XML-RPC接続テスト関数を追加8/28
+  exports.testXmlRpc = functions
+  .region('asia-northeast1')
+  .https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    
+    const https = require('https');
+    const xmlTest = `<?xml version="1.0"?>
+<methodCall>
+  <methodName>system.listMethods</methodName>
+  <params></params>
+</methodCall>`;
+    
+    const url = 'https://www.entamade.jp/xmlrpc.php';
+    
+    try {
+      const result = await new Promise((resolve) => {
+        const req = https.request(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/xml',
+            'Content-Length': Buffer.byteLength(xmlTest)
+          },
+          timeout: 10000
+        }, (response) => {
+          let data = '';
+          response.on('data', chunk => data += chunk);
+          response.on('end', () => {
+            resolve({
+              status: response.statusCode,
+              headers: response.headers,
+              body: data.substring(0, 500)
+            });
+          });
+        });
+        
+        req.on('timeout', () => {
+          resolve({ error: 'Timeout', message: 'No response in 10 seconds' });
+        });
+        
+        req.on('error', (e) => {
+          resolve({ error: e.message });
+        });
+        
+        req.write(xmlTest);
+        req.end();
+      });
+      
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  }
+
+  //checkConfig関数を追加
+  exports.checkConfig = functions
+  .region('asia-northeast1')
+  .https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    const config = functions.config();
+    console.log('Full config:', JSON.stringify(config, null, 2));
+    res.json({
+      hasWordpress: !!config.wordpress,
+      wordpressUser: config.wordpress?.username || 'NOT SET',  // user → username
+      wordpressUrl: config.wordpress?.url || 'NOT SET',
+      hasPassword: !!config.wordpress?.password,  // app_password → password
+      hasOpenAI: !!config.openai?.api_key
+    });
+  });
