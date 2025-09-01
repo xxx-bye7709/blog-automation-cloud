@@ -94,7 +94,7 @@ ${normalizedProducts.map((p, i) => `
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            productData: normalizedProducts[0],
+            products: normalizedProducts,  // ← products配列として全商品を送る
             keyword: keyword,
             autoPost: true
           })
