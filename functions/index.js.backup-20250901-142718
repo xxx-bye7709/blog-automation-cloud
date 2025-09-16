@@ -17,15 +17,15 @@ if (functions.config().openai && functions.config().openai.api_key) {
 // .envファイルは自動的に読み込まれる（Firebase Functions v4.8.0以降）
 
 // 遅延読み込み用の変数
-let BlogTool;
+let BlogAutomationTool;
 let ImageGenerator;
 let PerformanceSystem;
 let WordPressMediaManager;
 
 // 初期化関数
 function loadModules() {
-  if (!BlogTool) {
-    BlogTool = require('./lib/blog-tool');
+  if (!BlogAutomationTool) {
+    BlogAutomationTool = require('./lib/blog-tool');
   }
   if (!ImageGenerator) {
     ImageGenerator = require('./lib/image-generator');
@@ -54,53 +54,11 @@ function initializeServices() {
 }
 
 // === ヘルパー関数 ===
-const generateArticleForCategory = async (category, targetSite = null) => {
+const generateArticleForCategory = async (category) => {
   loadModules();
-  
-  let siteConfig = null;
-  if (targetSite) {
-    const siteDoc = await admin.firestore()
-      .collection('wordpress_sites')
-      .doc(targetSite)
-      .get();
-    
-    if (siteDoc.exists) {
-      siteConfig = {
-        ...siteDoc.data(),
-        id: siteDoc.id  // ⚠️ この行を追加！ドキュメントIDをidとして追加
-      };
-      console.log(`Using site: ${siteConfig.name} (ID: ${siteConfig.id}) for ${category} article`);
-    }
-  }
-  
-
-  const blogTool = new BlogTool(siteConfig); // サイト情報を渡す
-  // SEO最適化オプションを追加
-  const article = await blogTool.generateArticle(category, {
-    keyword: category === 'game' ? 'ゲーム攻略' : 
-           category === 'anime' ? 'アニメ新作' :
-           category === 'entertainment' ? 'エンタメ最新' :
-           category === 'movie' ? '映画レビュー' :
-           category === 'music' ? '音楽ランキング' :
-           category === 'tech' ? 'IT最新技術' :
-           category === 'beauty' ? '美容トレンド' :
-           category === 'food' ? 'グルメ情報' :
-           category === 'DMM' ? 'DMM人気' : category,
-  generateImage: true
-});
+  const blogTool = new BlogAutomationTool();
+  const article = await blogTool.generateArticle(category);
   const result = await blogTool.postToWordPress(article);
-  
-  // Firestoreに記録する際にtargetSiteを含める
-  if (targetSite) {
-    await admin.firestore().collection('generatedArticles').add({
-      ...result,
-      targetSite: targetSite,
-      siteName: siteConfig?.name,
-      siteUrl: siteConfig?.url,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-  }
-  
   return result;
 };
 
@@ -114,7 +72,7 @@ exports.testSEOAnalysis = functions
     return cors(req, res, async () => {
       try {
         loadModules();
-        const blogTool = new BlogTool();
+        const blogTool = new BlogAutomationTool();
         const category = req.query.category || 'entertainment';
         
         console.log('🔍 SEO Analysis Test Starting...');
@@ -195,7 +153,7 @@ exports.testSEOOptimizedPost = functions
     return cors(req, res, async () => {
       try {
         loadModules();
-        const blogTool = new BlogTool();
+        const blogTool = new BlogAutomationTool();
         const category = req.query.category || 'entertainment';
         const keyword = req.query.keyword || null;
         
@@ -265,7 +223,7 @@ exports.seoHealthCheck = functions
     return cors(req, res, async () => {
       try {
         loadModules();
-        const blogTool = new BlogTool();
+        const blogTool = new BlogAutomationTool();
         
         const categories = ['entertainment', 'anime', 'game', 'movie', 'music', 'tech', 'beauty', 'food'];
         const results = {};
@@ -336,13 +294,8 @@ exports.generateEntertainmentArticle = functions
   .https.onRequest(async (req, res) => {
     return cors(req, res, async () => {
       try {
-        const targetSite = req.body?.targetSite || null; // targetSiteを取得
-        const result = await generateArticleForCategory('entertainment', targetSite, targetSite);
-        res.json({ 
-          success: true, 
-          targetSite: targetSite,
-          ...result 
-        });
+        const result = await generateArticleForCategory('entertainment');
+        res.json({ success: true, ...result });
       } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ success: false, error: error.message });
@@ -357,13 +310,8 @@ exports.generateAnimeArticle = functions
   .https.onRequest(async (req, res) => {
     return cors(req, res, async () => {
       try {
-        const targetSite = req.body?.targetSite || null; // targetSiteを取得
-        const result = await generateArticleForCategory('entertainment', targetSite);
-        res.json({ 
-          success: true, 
-          targetSite: targetSite,
-          ...result 
-        });
+        const result = await generateArticleForCategory('anime');
+        res.json({ success: true, ...result });
       } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ success: false, error: error.message });
@@ -378,9 +326,8 @@ exports.generateGameArticle = functions
   .https.onRequest(async (req, res) => {
     return cors(req, res, async () => {
       try {
-        const targetSite = req.body?.targetSite || null; // 追加
-        const result = await generateArticleForCategory('game', targetSite); // 修正
-        res.json({ success: true, targetSite, ...result }); // targetSite追加
+        const result = await generateArticleForCategory('game');
+        res.json({ success: true, ...result });
       } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ success: false, error: error.message });
@@ -395,13 +342,8 @@ exports.generateMovieArticle = functions
   .https.onRequest(async (req, res) => {
     return cors(req, res, async () => {
       try {
-        const targetSite = req.body?.targetSite || null; // targetSiteを取得
-        const result = await generateArticleForCategory('entertainment', targetSite);
-        res.json({ 
-          success: true, 
-          targetSite: targetSite,
-          ...result 
-        });
+        const result = await generateArticleForCategory('movie');
+        res.json({ success: true, ...result });
       } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ success: false, error: error.message });
@@ -416,13 +358,8 @@ exports.generateMusicArticle = functions
   .https.onRequest(async (req, res) => {
     return cors(req, res, async () => {
       try {
-        const targetSite = req.body?.targetSite || null; // targetSiteを取得
-        const result = await generateArticleForCategory('entertainment', targetSite);
-        res.json({ 
-          success: true, 
-          targetSite: targetSite,
-          ...result 
-        });
+        const result = await generateArticleForCategory('music');
+        res.json({ success: true, ...result });
       } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ success: false, error: error.message });
@@ -437,19 +374,15 @@ exports.generateTechArticle = functions
   .https.onRequest(async (req, res) => {
     return cors(req, res, async () => {
       try {
-        const targetSite = req.body?.targetSite || null; // targetSiteを取得
-        const result = await generateArticleForCategory('entertainment', targetSite);
-        res.json({ 
-          success: true, 
-          targetSite: targetSite,
-          ...result 
-        });
+        const result = await generateArticleForCategory('tech');
+        res.json({ success: true, ...result });
       } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ success: false, error: error.message });
       }
     });
   });
+
 // 美容記事生成
 exports.generateBeautyArticle = functions
   .region('asia-northeast1')
@@ -457,13 +390,8 @@ exports.generateBeautyArticle = functions
   .https.onRequest(async (req, res) => {
     return cors(req, res, async () => {
       try {
-        const targetSite = req.body?.targetSite || null; // targetSiteを取得
-        const result = await generateArticleForCategory('entertainment', targetSite);
-        res.json({ 
-          success: true, 
-          targetSite: targetSite,
-          ...result 
-        });
+        const result = await generateArticleForCategory('beauty');
+        res.json({ success: true, ...result });
       } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ success: false, error: error.message });
@@ -478,13 +406,8 @@ exports.generateFoodArticle = functions
   .https.onRequest(async (req, res) => {
     return cors(req, res, async () => {
       try {
-        const targetSite = req.body?.targetSite || null; // targetSiteを取得
-        const result = await generateArticleForCategory('entertainment', targetSite);
-        res.json({ 
-          success: true, 
-          targetSite: targetSite,
-          ...result 
-        });
+        const result = await generateArticleForCategory('food');
+        res.json({ success: true, ...result });
       } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ success: false, error: error.message });
@@ -499,11 +422,10 @@ exports.generateRandomArticle = functions
   .https.onRequest(async (req, res) => {
     return cors(req, res, async () => {
       try {
-        const targetSite = req.body?.targetSite || null; // targetSiteを取得
         const categories = ['entertainment', 'anime', 'game', 'movie', 'music', 'tech', 'beauty', 'food'];
         const randomCategory = categories[Math.floor(Math.random() * categories.length)];
         const result = await generateArticleForCategory(randomCategory);
-        res.json({ success: true, targetSite: targetSite, category: randomCategory, ...result });
+        res.json({ success: true, category: randomCategory, ...result });
       } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ success: false, error: error.message });
@@ -521,7 +443,7 @@ exports.testXMLRPCImageUpload = functions
     return cors(req, res, async () => {
       try {
         loadModules();
-        const blogTool = new BlogTool();
+        const blogTool = new BlogAutomationTool();
         
         console.log('🖼️ XML-RPC画像アップロードテスト開始...');
         
@@ -569,7 +491,7 @@ exports.fixMissingImage = functions
     return cors(req, res, async () => {
       try {
         loadModules();
-        const blogTool = new BlogTool();
+        const blogTool = new BlogAutomationTool();
         
         const postId = req.query.postId || req.body.postId;
         if (!postId) {
@@ -626,7 +548,7 @@ exports.testCompleteArticleWithImage = functions
     return cors(req, res, async () => {
       try {
         loadModules();
-        const blogTool = new BlogTool();
+        const blogTool = new BlogAutomationTool();
         const category = req.query.category || 'entertainment';
         
         console.log('🚀 画像付き完全記事生成テスト開始...');
@@ -682,7 +604,7 @@ exports.generateAdultArticle = functions
         const contentLevel = req.query.level || 'general';
         
         loadModules();
-        const blogTool = new BlogTool();
+        const blogTool = new BlogAutomationTool();
         
         // シンプルHTML版記事生成
         const article = await generateSimpleHTMLRelationshipArticle(blogTool, contentLevel);
@@ -790,7 +712,7 @@ async function generateSimpleHTMLRelationshipArticle(blogTool, contentLevel = 'g
 
   try {
     const response = await blogTool.openai.chat.completions.create({
-      model: 'gpt-5-mini',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -939,7 +861,7 @@ exports.testBlogPost = functions
         
         console.log(`🚀 Enhanced blog post test - Category: ${category}`);
         
-        const blogTool = new BlogTool();
+        const blogTool = new BlogAutomationTool();
         
         // 記事生成と投稿（画像アップロード含む）
         const article = await blogTool.generateArticle(category);
@@ -980,7 +902,7 @@ exports.batchGenerateSEOPosts = functions
     return cors(req, res, async () => {
       try {
         loadModules();
-        const blogTool = new BlogTool();
+        const blogTool = new BlogAutomationTool();
         
         const count = Math.min(parseInt(req.query.count) || 5, 10); // 最大10記事
         const categories = ['entertainment', 'anime', 'game', 'movie', 'music', 'tech', 'beauty', 'food'];
@@ -1242,9 +1164,9 @@ exports.triggerScheduledPost = functions.runWith({ timeoutSeconds: 540, memory: 
     const category = await scheduleManager.getNextCategory();
     console.log('選択されたカテゴリー:', category);
     
-    // BlogToolの初期化（波括弧なし）
-    const BlogTool = require('./lib/blog-tool');
-    const blogTool = new BlogTool();
+    // BlogAutomationToolの初期化（波括弧なし）
+    const BlogAutomationTool = require('./lib/blog-tool');
+    const blogTool = new BlogAutomationTool();
     
     // 記事生成
     console.log(`${category}記事を生成中...`);
@@ -1337,7 +1259,7 @@ exports.scheduledHourlyPost = functions
 
       // 記事生成
       loadModules();
-      const blogTool = new BlogTool();
+      const blogTool = new BlogAutomationTool();
       const article = await blogTool.generateArticle(category);
       const result = await blogTool.postToWordPress(article);
       
@@ -1420,8 +1342,8 @@ exports.triggerScheduledPost = functions
         : `generate${category.charAt(0).toUpperCase() + category.slice(1)}Article`;
       
       // 既存の記事生成ロジックを使用
-      const BlogTool = require('./lib/blog-tool');
-      const blogTool = new BlogTool();
+      const BlogAutomationTool = require('./lib/blog-tool');
+      const blogTool = new BlogAutomationTool();
       
       const article = await blogTool.generateArticle(category);
       const result = await blogTool.postToWordPress(article);
@@ -1513,7 +1435,7 @@ exports.generateArticleWithProducts = functions
         console.log('Parameters:', { keyword, category, limit, templateId, postToWordPress });
         
         // モジュール読み込み
-        const BlogTool = require('./lib/blog-tool');
+        const BlogAutomationTool = require('./lib/blog-tool');
         const axios = require('axios');
         
         // 1. DMM API直接呼び出し
@@ -1574,7 +1496,7 @@ exports.generateArticleWithProducts = functions
         
         // 2. 記事生成
         console.log('Generating article...');
-        const blogTool = new BlogTool();
+        const blogTool = new BlogAutomationTool();
         
         let articlePrompt;
         if (products.length > 0) {
@@ -1759,7 +1681,7 @@ exports.searchProducts = functions
         const { keyword, genre, limit = 10 } = req.query;
         
         const DMMApi = require('./lib/dmm-api');
-        const BlogTool = require('./lib/blog-tool');
+        const BlogAutomationTool = require('./lib/blog-tool');
         const dmmApi = new DMMApi();
         
         let products;
@@ -1820,9 +1742,9 @@ exports.generateProductReview = functions
         autoPost = true
       } = requestData;
 
-      // 後方互換性のため、productsToProcess[0]?も確認
+      // 後方互換性のため、productDataも確認
       const productsToProcess = products.length > 0 ? products : 
-                         requestData.product ? [requestData.product] : [];
+                         requestData.productData ? [requestData.productData] : [];
 
       console.log(`📦 Processing ${productsToProcess.length} products`);
       
@@ -1839,12 +1761,6 @@ exports.generateProductReview = functions
           keyword,
           { autoPost }
         );
-
-      // 複数商品のHTMLセクションを生成して追加
-      if (productsToProcess.length > 0) {
-        const productHTML = generateProductSection(productsToProcess, 'review');
-        article.content = article.content + '\n\n' + productHTML;
-      }
       
       // ★強化されたクリーンアップ処理
       if (article.content) {
@@ -1873,11 +1789,11 @@ exports.generateProductReview = functions
       }
       
       // ★画像URLが存在する場合のみ画像を挿入
-      const imageUrl = productsToProcess[0]?.imageUrl || productsToProcess[0]?.imageURL || productsToProcess[0]?.image;  // ← 修正！
-if (imageUrl) {
-  console.log('Inserting image:', imageUrl);
-  
-  const imageHtml = `
+      const imageUrl = productData.imageUrl || productData.imageURL || productData.image;
+      if (imageUrl) {
+        console.log('Inserting image:', imageUrl);
+        
+        const imageHtml = `
 <div class="product-main-image" style="text-align: center; margin: 30px 0;">
   <img src="${imageUrl}" alt="${productsToProcess[0]?.title || keyword}" 
        style="max-width: 600px; width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
@@ -1967,8 +1883,8 @@ if (imageUrl) {
       }
       
       // タグ・カテゴリの設定
-      article.category = productsToProcess[0].category || 'products';
-      article.tags = [keyword, productsToProcess[0].genre, productsToProcess[0].maker].filter(Boolean);
+      article.category = productData.category || 'products';
+      article.tags = [keyword, productData.genre, productData.maker].filter(Boolean);
       
       console.log('Article processed:', {
         title: article.title,
@@ -1992,7 +1908,7 @@ if (imageUrl) {
         success: true,
         title: article.title,
         keyword: keyword,
-        productId: productsToProcess[0]?.content_id || productsToProcess[0]?.id || "unknown",
+        productId: productId,
         postId: postResult.postId || null,
         postUrl: postResult.url || null,
         postSuccess: postResult.success || false,
@@ -2093,7 +2009,7 @@ exports.generateArticleWithMockProducts = functions
     res.set('Access-Control-Allow-Origin', '*');
     
     try {
-      const BlogTool = require('./lib/blog-tool');
+      const BlogAutomationTool = require('./lib/blog-tool');
       
       const {
         keyword = 'エンタメ',
@@ -2127,8 +2043,8 @@ exports.generateArticleWithMockProducts = functions
         }
       ];
       
-      // BlogToolで記事生成
-      const blogTool = new BlogTool();
+      // BlogAutomationToolで記事生成
+      const blogTool = new BlogAutomationTool();
       
       const articlePrompt = `
 ${keyword}に関する魅力的な記事を作成してください。
@@ -2375,9 +2291,9 @@ exports.generateArticleFromDashboard = functions
         
         console.log(`Generating article with ${selectedProducts.length} products from dashboard`);
         
-        // BlogToolで記事生成
-        const BlogTool = require('./lib/blog-tool');
-        const blogTool = new BlogTool();
+        // BlogAutomationToolで記事生成
+        const BlogAutomationTool = require('./lib/blog-tool');
+        const blogTool = new BlogAutomationTool();
         
         // 記事タイプに応じたプロンプト作成
         let promptTemplate = '';
@@ -2923,9 +2839,9 @@ exports.generatePost = functions
         });
       }
 
-      // BlogToolを使用して記事生成
-      const BlogTool = require('./lib/blog-tool');
-      const blogTool = new BlogTool();
+      // BlogAutomationToolを使用して記事生成
+      const BlogAutomationTool = require('./lib/blog-tool');
+      const blogTool = new BlogAutomationTool();
       
       const article = await blogTool.generateArticle('entertainment');
 
@@ -3042,9 +2958,9 @@ exports.testSimplePost = functions
       
       console.log(`Running scheduled post for category: ${randomCategory}`);
 
-      // BlogToolを使用して記事生成
-      const BlogTool = require('./lib/blog-tool');
-      const blogTool = new BlogTool();
+      // BlogAutomationToolを使用して記事生成
+      const BlogAutomationTool = require('./lib/blog-tool');
+      const blogTool = new BlogAutomationTool();
       
       const article = await blogTool.generateArticle(randomCategory);
       const result = await blogTool.postToWordPress(article);
@@ -3190,295 +3106,3 @@ function generateArticleContent(products, articleType, keyword) {
       hasOpenAI: !!config.openai?.api_key
     });
   });
-
-/**
- * CTA付き記事のプレビュー
- * URL: /previewArticleWithCTA
- * Method: GET
- */
-exports.previewArticleWithCTA = functions.https.onRequest(async (req, res) => {
-  res.set('Access-Control-Allow-Origin', '*');
-  
-  try {
-    // 環境変数を読み込み
-    
-    const { OpenChatCTAGenerator } = require('./lib/openchat-cta-generator');
-    const generator = new OpenChatCTAGenerator();
-    
-    const sampleContent = `
-      <h2>サンプル商品記事</h2>
-      <p>これは商品記事のサンプルです。実際の記事では、ここに商品の詳細が入ります。</p>
-      <h3>商品1: おすすめアイテム</h3>
-      <p>商品の説明文がここに入ります。価格や特徴などを詳しく説明します。</p>
-      <h3>商品2: 人気商品</h3>
-      <p>2つ目の商品の説明です。比較情報なども含まれます。</p>
-      <h3>商品3: 新着商品</h3>
-      <p>3つ目の商品説明。ユーザーレビューなども記載されます。</p>
-      <h3>まとめ</h3>
-      <p>今回は3つの商品を紹介しました。ぜひチェックしてみてください。</p>
-    `;
-    
-    const contentWithCTA = generator.integrateWithProductArticle(sampleContent);
-    
-    // HTMLレスポンス
-    res.send(`
-      <!DOCTYPE html>
-      <html lang="ja">
-      <head>
-        <title>オープンチャットCTA プレビュー</title>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-          body { 
-            max-width: 900px; 
-            margin: 0 auto; 
-            padding: 20px;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-            background: #f0f2f5;
-            line-height: 1.6;
-          }
-          .preview-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
-            border-radius: 15px 15px 0 0;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-          }
-          .preview-header h1 {
-            margin: 0 0 10px 0;
-            font-size: 28px;
-          }
-          .preview-header p {
-            margin: 0;
-            opacity: 0.9;
-            font-size: 16px;
-          }
-          .preview-info {
-            background: #fff8dc;
-            padding: 20px;
-            border-left: 4px solid #ffc107;
-            margin-bottom: 0;
-          }
-          .preview-content {
-            background: white;
-            padding: 40px;
-            border-radius: 0 0 15px 15px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-          }
-          .preview-content h2 {
-            color: #333;
-            border-bottom: 2px solid #eee;
-            padding-bottom: 10px;
-          }
-          .preview-content h3 {
-            color: #555;
-            margin-top: 30px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="preview-header">
-          <h1>🎯 オープンチャットCTA プレビュー</h1>
-          <p>商品記事に自動追加されるCTAの表示確認ページ</p>
-        </div>
-        <div class="preview-info">
-          <strong>📍 CTAの表示位置：</strong><br>
-          1. 記事中間 - さりげない誘導<br>
-          2. ノート案内 - 週2回更新の告知<br>
-          3. 記事末尾 - メインの参加案内
-        </div>
-        <div class="preview-content">
-          ${contentWithCTA}
-        </div>
-        <script>
-          console.log('CTA Preview loaded successfully');
-        </script>
-      </body>
-      </html>
-    `);
-    
-  } catch (error) {
-    console.error('プレビューエラー:', error);
-    res.status(500).send(`
-      <html>
-        <body style="font-family: sans-serif; padding: 20px;">
-          <h1>❌ エラーが発生しました</h1>
-          <pre style="background: #f5f5f5; padding: 15px; border-radius: 5px;">
-${error.message}
-
-${error.stack}
-          </pre>
-          <p>考えられる原因:</p>
-          <ul>
-            <li>openchat-cta-generator.js が見つからない</li>
-            <li>環境変数が設定されていない</li>
-            <li>構文エラー</li>
-          </ul>
-        </body>
-      </html>
-    `);
-  }
-});
-
-/**
- * CTAクリックのトラッキング
- * URL: /trackOpenChatCTA
- * Method: POST
- * Body: { action: 'click', position: 'end' }
- */
-exports.trackOpenChatCTA = functions.https.onRequest(async (req, res) => {
-  // CORS対応
-  res.set('Access-Control-Allow-Origin', '*');
-  res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'Content-Type');
-  
-  // OPTIONSリクエストへの対応
-  if (req.method === 'OPTIONS') {
-    res.status(204).send('');
-    return;
-  }
-  
-  try {
-    const { action, position } = req.body || {};
-    
-    // バリデーション
-    if (!action) {
-      return res.status(400).json({ 
-        error: 'action is required',
-        validActions: ['view', 'click', 'copy']
-      });
-    }
-    
-    // Firestoreに記録
-    const docRef = await admin.firestore().collection('openchat_analytics').add({
-      action: action,        // 'view', 'click', 'copy'
-      position: position,    // 'mid', 'end', 'note'
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
-      userAgent: req.headers['user-agent'],
-      date: new Date().toISOString().split('T')[0] // 日付別集計用
-    });
-    
-    console.log(`CTA tracked: ${action} at ${position} - ${docRef.id}`);
-    
-    res.json({ 
-      success: true,
-      id: docRef.id
-    });
-    
-  } catch (error) {
-    console.error('トラッキングエラー:', error);
-    res.status(500).json({ 
-      error: error.message 
-    });
-  }
-});
-
-// WordPress サイト管理用エンドポイント
-exports.getWordPressSites = functions
-  .region('asia-northeast1')  // ← この行を追加
-  .https.onRequest(async (req, res) => {
-    res.set('Access-Control-Allow-Origin', '*');
-  
-  try {
-    const snapshot = await admin.firestore()
-      .collection('wordpress_sites')
-      .orderBy('priority')
-      .get();
-    
-    const sites = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-    
-    res.json({ 
-      success: true, 
-      total: sites.length,
-      active: sites.filter(s => s.enabled).length,
-      sites 
-    });
-  } catch (error) {
-    console.error('Error getting sites:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// アクティブサイトのみ取得
-exports.getActiveSites = functions
-   .region('asia-northeast1')  // ← この行を追加
-  .https.onRequest(async (req, res) => {
-  res.set('Access-Control-Allow-Origin', '*');
-  
-  try {
-    const snapshot = await admin.firestore()
-      .collection('wordpress_sites')
-      .where('enabled', '==', true)
-      .orderBy('priority')
-      .get();
-    
-    const sites = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-    
-    res.json({ success: true, sites });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// サイト別の統計情報を取得
-exports.getSiteStats = functions
-  .region('asia-northeast1')
-  .https.onRequest(async (req, res) => {
-    res.set('Access-Control-Allow-Origin', '*');
-    
-    try {
-      const sitesSnapshot = await admin.firestore()
-        .collection('wordpress_sites')
-        .orderBy('priority')
-        .get();
-      
-      const stats = await Promise.all(
-        sitesSnapshot.docs.map(async (doc) => {
-          const siteData = doc.data();
-          
-          // 各サイトの記事数をカウント
-          const postsSnapshot = await admin.firestore()
-            .collection('generatedArticles')
-            .where('targetSite', '==', doc.id)
-            .limit(1)
-            .orderBy('createdAt', 'desc')
-            .get();
-          
-          // 記事総数を取得
-          const totalPostsSnapshot = await admin.firestore()
-            .collection('generatedArticles')
-            .where('targetSite', '==', doc.id)
-            .get();
-          
-          return {
-            siteId: doc.id,
-            siteName: siteData.name,
-            siteUrl: siteData.url,
-            enabled: siteData.enabled,
-            isDefault: siteData.isDefault,
-            postCount: totalPostsSnapshot.size,
-            lastPostDate: postsSnapshot.docs[0]?.data()?.createdAt?.toDate() || null,
-            dmmConfigured: !!(siteData.dmmApiKey && siteData.dmmAffiliateId)
-          };
-        })
-      );
-      
-      res.json({ 
-        success: true, 
-        totalSites: stats.length,
-        activeSites: stats.filter(s => s.enabled).length,
-        stats 
-      });
-    } catch (error) {
-      console.error('Error getting site stats:', error);
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
-
-

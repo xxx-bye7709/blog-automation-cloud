@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import SiteManagement from '@/components/SiteManagement';  // ← 追加
+
 
 export default function Home() {
   const [stats, setStats] = useState({
@@ -85,6 +87,8 @@ export default function Home() {
             <div className="text-gray-400">総投稿数</div>
           </div>
         </div>
+
+        <SiteManagement />
 
         {/* クイックアクション */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

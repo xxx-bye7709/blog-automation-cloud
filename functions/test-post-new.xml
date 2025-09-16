@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<methodCall>
+  <methodName>wp.newPost</methodName>
+  <params>
+    <param><value><int>1</int></value></param>
+    <param><value><string>entamade</string></value></param>
+    <param><value><string>IChL 1yMu 4OUF YpL6 Wz8d oxln</string></value></param>
+    <param>
+      <value>
+        <struct>
+          <member>
+            <name>post_type</name>
+            <value><string>post</string></value>
+          </member>
+          <member>
+            <name>post_status</name>
+            <value><string>draft</string></value>
+          </member>
+          <member>
+            <name>post_title</name>
+            <value><string>New Password Test</string></value>
+          </member>
+          <member>
+            <name>post_content</name>
+            <value><string>Testing with new password.</string></value>
+          </member>
+        </struct>
+      </value>
+    </param>
+  </params>
+</methodCall>

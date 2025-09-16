@@ -5,28 +5,19 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Calendar, Clock, Play, Pause, Settings, CheckCircle, XCircle,
-  Info, TrendingUp, RotateCw, ArrowLeft, Loader2, Zap, Globe
+  Info, TrendingUp, RotateCw, ArrowLeft, Loader2, Zap
 } from 'lucide-react';
 
 interface Schedule {
   enabled: boolean;
   interval: string;
-  maxDailyPosts: number;
+  maxDailyPosts: number;  // maxPostsPerDay → maxDailyPosts に変更
   categories: string[];
   todayPostCount: number;
-  targetSite?: string;
   lastUpdated?: string;
   nextPost?: string;
   lastCategoryIndex?: number;
-  categoryIndex?: number;
-}
-
-interface WordPressSite {
-  id: string;
-  name: string;
-  url: string;
-  enabled: boolean;
-  isDefault: boolean;
+  categoryIndex?: number;  // 追加
 }
 
 export default function SchedulePage() {
@@ -34,111 +25,35 @@ export default function SchedulePage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'success' | 'error' | 'info'>('info');
-  const [sites, setSites] = useState<WordPressSite[]>([]);
   const [config, setConfig] = useState({
-    interval: 'hourly',
-    maxDailyPosts: 24,
-    categories: ['entertainment', 'anime', 'game'],
-    targetSite: ''
-  });
+  interval: 'hourly',
+  maxDailyPosts: 24,  // maxPostsPerDay → maxDailyPosts に変更
+  categories: ['entertainment', 'anime', 'game']
+});
 
   const FIREBASE_URL = 'https://asia-northeast1-blog-automation-system.cloudfunctions.net';
 
-  const allCategories = ['entertainment', 'anime', 'game', 'movie', 'music', 'tech', 'beauty', 'food'];
-  const categoryLabels: Record<string, string> = {
-    entertainment: 'エンタメ',
-    anime: 'アニメ',
-    game: 'ゲーム',
-    movie: '映画',
-    music: '音楽',
-    tech: 'テクノロジー',
-    beauty: '美容',
-    food: 'グルメ'
-  };
-
-  const categoryIcons: Record<string, string> = {
-    entertainment: '🎬',
-    anime: '🎌',
-    game: '🎮',
-    movie: '🎥',
-    music: '🎵',
-    tech: '💻',
-    beauty: '💄',
-    food: '🍜'
-  };
-
-  const categoryColors: Record<string, string> = {
-    entertainment: 'from-purple-500 to-pink-500',
-    anime: 'from-pink-500 to-purple-500',
-    game: 'from-green-500 to-blue-500',
-    movie: 'from-red-500 to-orange-500',
-    music: 'from-blue-500 to-purple-500',
-    tech: 'from-cyan-500 to-blue-500',
-    beauty: 'from-pink-500 to-rose-500',
-    food: 'from-orange-500 to-yellow-500'
-  };
-
-  const intervalOptions: Record<string, { label: string; maxPosts: number }> = {
-    'hourly': { label: '1時間ごと', maxPosts: 24 },
-    'every_2_hours': { label: '2時間ごと', maxPosts: 12 },
-    'every_3_hours': { label: '3時間ごと', maxPosts: 8 },
-    'every_6_hours': { label: '6時間ごと', maxPosts: 4 },
-    'daily': { label: '1日1回', maxPosts: 1 }
-  };
-
-  // 関数定義
-  const showMessage = (msg: string, type: 'success' | 'error' | 'info') => {
-    setMessage(msg);
-    setMessageType(type);
-    setTimeout(() => setMessage(''), 5000);
-  };
-
-  const fetchSites = async () => {
-    try {
-      console.log('Fetching sites...'); 
-      const response = await fetch(`${FIREBASE_URL}/getWordPressSites`);
-      const data = await response.json();
-      console.log('Sites data:', data);
-      
-      if (data.success && data.sites) {
-        const activeSites = data.sites.filter((site: any) => site.enabled);
-        setSites(activeSites.map((site: any) => ({
-          id: site.id,
-          name: site.name || site.siteName,
-          url: site.url || site.siteUrl,
-          enabled: site.enabled,
-          isDefault: site.isDefault || false
-        })));
-        
-        const defaultSite = activeSites.find((s: any) => s.isDefault);
-        if (defaultSite && !config.targetSite) {
-          setConfig(prev => ({ ...prev, targetSite: defaultSite.id }));
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch sites:', error);
-      showMessage('サイト情報の取得に失敗しました', 'error');
-    }
-  };
+  useEffect(() => {
+    fetchSchedule();
+  }, []);
 
   const fetchSchedule = async () => {
-    try {
-      const response = await fetch(`${FIREBASE_URL}/getSchedule`);
-      const data = await response.json();
-      if (data.success && data.schedule) {
-        setSchedule(data.schedule);
-        setConfig({
-          interval: data.schedule.interval || 'hourly',
-          maxDailyPosts: parseInt(data.schedule.maxDailyPosts) || 24,
-          categories: data.schedule.categories || ['entertainment', 'anime', 'game'],
-          targetSite: data.schedule.targetSite || ''
-        });
-      }
-    } catch (error) {
-      console.error('Failed to fetch schedule:', error);
-      showMessage('スケジュール情報の取得に失敗しました', 'error');
+  try {
+    const response = await fetch(`${FIREBASE_URL}/getSchedule`);
+    const data = await response.json();
+    if (data.success && data.schedule) {
+      setSchedule(data.schedule);
+      setConfig({
+        interval: data.schedule.interval || 'hourly',
+        maxDailyPosts: parseInt(data.schedule.maxDailyPosts) || 24,  // 修正
+        categories: data.schedule.categories || ['entertainment', 'anime', 'game']
+      });
     }
-  };
+  } catch (error) {
+    console.error('Failed to fetch schedule:', error);
+    showMessage('スケジュール情報の取得に失敗しました', 'error');
+  }
+};
 
   const handleSetSchedule = async () => {
     setLoading(true);
@@ -187,10 +102,12 @@ export default function SchedulePage() {
     showMessage('手動実行中...', 'info');
 
     try {
+      // カテゴリーからランダムに選択、またはデフォルト
       const selectedCategory = config.categories.length > 0
         ? config.categories[Math.floor(Math.random() * config.categories.length)]
         : 'entertainment';
 
+      // カテゴリーに応じたエンドポイントを決定
       const categoryEndpoints: Record<string, string> = {
         'entertainment': '/generateEntertainmentArticle',
         'anime': '/generateAnimeArticle',
@@ -210,8 +127,7 @@ export default function SchedulePage() {
         body: JSON.stringify({
           scheduled: true,
           manual: true,
-          category: selectedCategory,
-          targetSite: config.targetSite
+          category: selectedCategory
         })
       });
 
@@ -238,14 +154,53 @@ export default function SchedulePage() {
     }));
   };
 
-  // useEffect
-  useEffect(() => {
-    fetchSchedule();
-    fetchSites();
-  }, []);
+  const showMessage = (msg: string, type: 'success' | 'error' | 'info') => {
+    setMessage(msg);
+    setMessageType(type);
+    setTimeout(() => setMessage(''), 5000);
+  };
 
-  // 選択されたサイトの情報を取得
-  const selectedSite = sites.find(s => s.id === config.targetSite);
+  const allCategories = ['entertainment', 'anime', 'game', 'movie', 'music', 'tech', 'beauty', 'food'];
+  const categoryLabels: Record<string, string> = {
+    entertainment: 'エンタメ',
+    anime: 'アニメ',
+    game: 'ゲーム',
+    movie: '映画',
+    music: '音楽',
+    tech: 'テクノロジー',
+    beauty: '美容',
+    food: 'グルメ'
+  };
+
+  const categoryIcons: Record<string, string> = {
+    entertainment: '🎬',
+    anime: '🎌',
+    game: '🎮',
+    movie: '🎥',
+    music: '🎵',
+    tech: '💻',
+    beauty: '💄',
+    food: '🍜'
+  };
+
+  const categoryColors: Record<string, string> = {
+    entertainment: 'from-purple-500 to-pink-500',
+    anime: 'from-pink-500 to-purple-500',
+    game: 'from-green-500 to-blue-500',
+    movie: 'from-red-500 to-orange-500',
+    music: 'from-blue-500 to-purple-500',
+    tech: 'from-cyan-500 to-blue-500',
+    beauty: 'from-pink-500 to-rose-500',
+    food: 'from-orange-500 to-yellow-500'
+  };
+
+  const intervalOptions: Record<string, { label: string; maxPosts: number }> = {
+    'hourly': { label: '1時間ごと', maxPosts: 24 },
+    'every_2_hours': { label: '2時間ごと', maxPosts: 12 },
+    'every_3_hours': { label: '3時間ごと', maxPosts: 8 },
+    'every_6_hours': { label: '6時間ごと', maxPosts: 4 },
+    'daily': { label: '1日1回', maxPosts: 1 }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
@@ -301,31 +256,6 @@ export default function SchedulePage() {
         <div className="grid lg:grid-cols-2 gap-8">
           {/* 左側：設定パネル */}
           <div className="space-y-6">
-            {/* 投稿先サイト選択 */}
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Globe className="w-5 h-5 text-cyan-400" />
-                <h3 className="text-lg font-semibold">投稿先サイト</h3>
-              </div>
-              <select
-                value={config.targetSite}
-                onChange={(e) => setConfig(prev => ({ ...prev, targetSite: e.target.value }))}
-                className="w-full px-4 py-3 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
-              >
-                <option value="">サイトを選択してください</option>
-                {sites.map(site => (
-                  <option key={site.id} value={site.id}>
-                    {site.name} {site.isDefault ? '(デフォルト)' : ''}
-                  </option>
-                ))}
-              </select>
-              {selectedSite && (
-                <p className="text-gray-400 text-sm mt-2">
-                  URL: {selectedSite.url}
-                </p>
-              )}
-            </div>
-
             {/* 投稿間隔設定 */}
             <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 p-6">
               <div className="flex items-center gap-2 mb-4">
@@ -368,108 +298,91 @@ export default function SchedulePage() {
             </div>
 
             {/* カテゴリー選択 */}
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <RotateCw className="w-5 h-5 text-purple-400" />
-                <h3 className="text-lg font-semibold">自動投稿カテゴリー</h3>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                {allCategories.map(category => (
-                  <label
-                    key={category}
-                    className="cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={config.categories.includes(category)}
-                      onChange={() => handleCategoryToggle(category)}
-                      className="sr-only"
-                    />
-                    <div className={`p-3 rounded-lg border transition-all flex items-center gap-2 ${
-                      config.categories.includes(category)
-                        ? 'bg-blue-600 border-blue-500 text-white'
-                        : 'bg-gray-700 border-gray-600 text-gray-400 hover:border-gray-500'
-                    }`}>
-                      <span className="text-xl">{categoryIcons[category]}</span>
-                      <span className="font-medium">{categoryLabels[category]}</span>
-                    </div>
-                  </label>
-                ))}
-              </div>
-              <p className="text-gray-400 text-sm mt-4">
-                選択したカテゴリーを順番に投稿します
-              </p>
-            </div>
+<div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 p-6">
+  <div className="flex items-center gap-2 mb-4">
+    <RotateCw className="w-5 h-5 text-purple-400" />
+    <h3 className="text-lg font-semibold">自動投稿カテゴリー</h3>
+  </div>
+  <div className="grid grid-cols-2 gap-3">
+    {allCategories.map(category => (
+      <label
+        key={category}
+        className="cursor-pointer"
+      >
+        <input
+          type="checkbox"
+          checked={config.categories.includes(category)}
+          onChange={() => handleCategoryToggle(category)}
+          className="sr-only"
+        />
+        <div className={`p-3 rounded-lg border transition-all flex items-center gap-2 ${
+          config.categories.includes(category)
+            ? 'bg-blue-600 border-blue-500 text-white'
+            : 'bg-gray-700 border-gray-600 text-gray-400 hover:border-gray-500'
+        }`}>
+          <span className="text-xl">{categoryIcons[category]}</span>
+          <span className="font-medium">{categoryLabels[category]}</span>
+        </div>
+      </label>
+    ))}
+  </div>
+  <p className="text-gray-400 text-sm mt-4">
+    選択したカテゴリーを順番に投稿します
+  </p>
+</div>
           </div>
 
           {/* 右側：プレビューと統計 */}
           <div className="space-y-6">
             {/* 投稿プレビュー */}
-            <div className="bg-gradient-to-br from-blue-900/30 to-purple-900/30 backdrop-blur-sm rounded-xl border border-blue-700/50 p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Info className="w-5 h-5 text-blue-400" />
-                <h3 className="text-lg font-semibold">投稿設定</h3>
-              </div>
+<div className="bg-gradient-to-br from-blue-900/30 to-purple-900/30 backdrop-blur-sm rounded-xl border border-blue-700/50 p-6">
+  <div className="flex items-center gap-2 mb-4">
+    <Info className="w-5 h-5 text-blue-400" />
+    <h3 className="text-lg font-semibold">投稿設定</h3>
+  </div>
 
-              <div className="space-y-4">
-                <div className="bg-gray-900/50 rounded-lg p-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400">投稿先</span>
-                    <span className="text-white font-medium">
-                      {selectedSite ? selectedSite.name : '未選択'}
-                    </span>
-                  </div>
-                </div>
+  <div className="space-y-4">
+    <div className="bg-gray-900/50 rounded-lg p-4">
+      <div className="flex justify-between items-center">
+        <span className="text-gray-400">投稿間隔</span>
+        <span className="text-white font-medium">
+          {intervalOptions[config.interval].label}
+        </span>
+      </div>
+    </div>
 
-                <div className="bg-gray-900/50 rounded-lg p-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400">投稿間隔</span>
-                    <span className="text-white font-medium">
-                      {intervalOptions[config.interval].label}
-                    </span>
-                  </div>
-                </div>
+    <div className="bg-gray-900/50 rounded-lg p-4">
+      <div className="flex justify-between items-center">
+        <span className="text-gray-400">1日の最大投稿数</span>
+        <span className="text-white font-medium">
+          {config.maxDailyPosts}記事
+        </span>
+      </div>
+    </div>
 
-                <div className="bg-gray-900/50 rounded-lg p-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400">1日の最大投稿数</span>
-                    <span className="text-white font-medium">
-                      {config.maxDailyPosts}記事
-                    </span>
-                  </div>
-                </div>
+    <div className="bg-gray-900/50 rounded-lg p-4">
+      <div className="flex justify-between items-center">
+        <span className="text-gray-400">選択カテゴリー数</span>
+        <span className="text-white font-medium">
+          {config.categories.length}個
+        </span>
+      </div>
+      {config.categories.length > 0 && (
+        <div className="mt-2 text-xs text-gray-500">
+          順番: {config.categories.map(c => categoryLabels[c]).join(' → ')}
+        </div>
+      )}
+    </div>
 
-                <div className="bg-gray-900/50 rounded-lg p-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400">選択カテゴリー数</span>
-                    <span className="text-white font-medium">
-                      {config.categories.length}個
-                    </span>
-                  </div>
-                  {config.categories.length > 0 && (
-                    <div className="mt-2 text-xs text-gray-500">
-                      順番: {config.categories.map(c => categoryLabels[c]).join(' → ')}
-                    </div>
-                  )}
-                </div>
-
-                {!config.targetSite && (
-                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
-                    <p className="text-yellow-400 text-sm">
-                      ⚠️ 投稿先サイトを選択してください
-                    </p>
-                  </div>
-                )}
-
-                {config.categories.length === 0 && (
-                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
-                    <p className="text-yellow-400 text-sm">
-                      ⚠️ 最低1つのカテゴリーを選択してください
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
+    {config.categories.length === 0 && (
+      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+        <p className="text-yellow-400 text-sm">
+          ⚠️ 最低1つのカテゴリーを選択してください
+        </p>
+      </div>
+    )}
+  </div>
+</div>
 
             {/* 現在の設定状態 */}
             {schedule && (
@@ -503,7 +416,7 @@ export default function SchedulePage() {
               <div className="flex gap-3">
                 <button
                   onClick={handleSetSchedule}
-                  disabled={loading || config.categories.length === 0 || !config.targetSite}
+                  disabled={loading || config.categories.length === 0}
                   className="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-lg"
                 >
                   <Settings className="w-5 h-5" />
@@ -535,7 +448,7 @@ export default function SchedulePage() {
               {/* 手動実行ボタン */}
               <button
                 onClick={handleManualTrigger}
-                disabled={loading || config.categories.length === 0 || !config.targetSite}
+                disabled={loading || config.categories.length === 0}
                 className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-lg font-medium hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-lg"
               >
                 <Zap className="w-5 h-5" />
