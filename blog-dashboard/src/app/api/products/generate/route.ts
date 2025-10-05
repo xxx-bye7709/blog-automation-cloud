@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   imageUrl: product.imageURL?.large || product.imageURL?.small || '',
   description: product.description || '',
   rating: product.rating || '4.5',
-  // ⭐ 動画関連フィールドを追加
+  // ⭐ 動画関連フィールドを追加します
   sampleMovieURL: product.sampleMovieURL || null,
   sampleMovie: product.sampleMovie || null,
   contentId: product.contentId || null,
