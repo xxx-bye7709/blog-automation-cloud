@@ -1,128 +1,86 @@
-// 完全修正版 - フォールバック付き
+// マルチサイト対応版
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { products, keyword, autoPost = false } = body;
+    const { products, keyword, targetSiteId, autoPost = true } = body;
 
-    console.log('Generating article for products:', products);
+    console.log('Generating article for site:', targetSiteId);
+    console.log('Products count:', products?.length);
+
+    if (!targetSiteId) {
+      return NextResponse.json(
+        { success: false, error: 'Target site ID is required' },
+        { status: 400 }
+      );
+    }
 
     // 商品データの正規化
     const normalizedProducts = products.map((product: any) => ({
-  title: product.title || '',
-  price: product.price || '',
-  affiliateUrl: product.affiliateURL || product.affiliateUrl || '',
-  imageUrl: product.imageURL?.large || product.imageURL?.small || '',
-  videoUrl: product.videoUrl || null,  // 追加
-  contentId: product.contentId || null,  // 追加
-  hasVideo: product.hasVideo || false,  // 追加
-  rating: product.rating || '4.5'
-}));
+      title: product.title || '',
+      price: product.price || '',
+      affiliateUrl: product.affiliateURL || product.affiliateUrl || '',
+      imageUrl: product.imageURL?.large || product.imageURL?.small || product.imageUrl || '',
+      videoUrl: product.videoUrl || null,
+      contentId: product.contentId || product.content_id || null,
+      hasVideo: product.hasVideo || false,
+      rating: product.rating || '4.5',
+      description: product.description || '',
+      maker: product.maker || ''
+    }));
 
-    // OpenAI API呼び出し（エラーハンドリング付き）
-    let content = '';
-    let useOpenAI = true;
-    
-    if (process.env.OPENAI_API_KEY) {
-      try {
-        const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-          },
-          body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            messages: [{
-              role: 'user',
-              content: `商品レビュー記事を作成。HTMLタグのみ使用。コードブロック記号は使用禁止。商品：${normalizedProducts.map(p => p.title).join(', ')}`
-            }],
-            temperature: 0.7,
-            max_tokens: 3000
-          })
-        });
-
-        if (openAIResponse.ok) {
-          const aiData = await openAIResponse.json();
-          if (aiData.choices && aiData.choices[0]) {
-            content = aiData.choices[0].message.content;
-            useOpenAI = true;
-          }
-        }
-      } catch (e) {
-        console.error('OpenAI API error:', e);
-        useOpenAI = false;
+    // マルチサイト対応APIを呼び出し
+    const wpResponse = await fetch(
+      `${process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_URL}/generateProductReviewMultiSite`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetSiteId: targetSiteId,  // サイトID追加
+          products: normalizedProducts,
+          keyword: keyword || 'レビュー',
+          autoPost: autoPost
+        })
       }
-    } else {
-      useOpenAI = false;
-    }
+    );
 
-    // フォールバックまたはOpenAI生成コンテンツ
-    if (!useOpenAI || !content) {
-      content = `
-<h2>おすすめ商品${normalizedProducts.length}選</h2>
-${normalizedProducts.map((p, i) => `
-<div style="border: 1px solid #ddd; padding: 20px; margin: 20px 0; border-radius: 10px;">
-  <h3>${i + 1}. ${p.title}</h3>
-  ${p.imageUrl ? `<img src="${p.imageUrl}" alt="${p.title}" style="max-width: 300px;">` : ''}
-  <p><strong>価格:</strong> ${p.price}</p>
-  <div style="margin: 20px 0;">
-    <a href="${p.affiliateUrl}" target="_blank" rel="noopener noreferrer sponsored" 
-       style="display: inline-block; padding: 15px 40px; background: linear-gradient(135deg, #ff6b6b 0%, #ff8e53 100%); 
-              color: white; text-decoration: none; border-radius: 30px; font-weight: bold;">
-      商品を購入する →
-    </a>
-  </div>
-</div>
-`).join('')}`;
-    }
+    const wpResult = await wpResponse.json();
 
-    // 不要な文字を削除
-    content = content
-      .replace(/```html?/gi, '')
-      .replace(/```/g, '')
-      .replace(/^\s+|\s+$/gm, '')
-      .replace(/\n{3,}/g, '\n\n');
-
-    const title = `【${keyword}】おすすめ${normalizedProducts.length}選`;
-
-    // WordPress投稿
-    if (autoPost) {
-  const wpResponse = await fetch(
-    `${process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_URL}/generateProductReview`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        products: normalizedProducts,  // ⭐ productDataではなくproducts（複数）
-        keyword: keyword,
-        autoPost: true
-      })
-    }
-  );
-      
-      const wpResult = await wpResponse.json();
+    if (wpResult.success) {
       return NextResponse.json({
         success: true,
-        content: content,
-        title: title,
+        title: wpResult.title,
         postId: wpResult.postId,
-        postUrl: wpResult.postUrl
+        postUrl: wpResult.postUrl,
+        site: wpResult.site,
+        message: wpResult.message
+      });
+    } else {
+      // APIエラーが発生した場合
+      console.error('WordPress API error:', wpResult);
+      
+      // DMM APIが停止中の場合のメッセージ
+      if (wpResult.error && wpResult.error.includes('DMM')) {
+        return NextResponse.json({
+          success: false,
+          error: 'DMM APIが現在利用できません。APIが復旧次第、記事生成が可能になります。'
+        });
+      }
+      
+      return NextResponse.json({
+        success: false,
+        error: wpResult.error || '記事生成に失敗しました'
       });
     }
-
-    return NextResponse.json({
-      success: true,
-      content: content,
-      title: title,
-      products: normalizedProducts
-    });
 
   } catch (error) {
     console.error('Article generation error:', error);
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
+      { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      },
       { status: 500 }
     );
   }
