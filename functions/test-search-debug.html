@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>検索テスト（デバッグ版）</title>
+    <style>
+        body { padding: 20px; font-family: sans-serif; }
+        button { padding: 10px 20px; background: #4CAF50; color: white; border: none; cursor: pointer; }
+        .result { margin-top: 20px; padding: 15px; background: #f0f0f0; }
+        .error { color: red; }
+        .debug { background: #333; color: #0f0; padding: 10px; margin-top: 10px; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h2>DMM商品検索テスト（デバッグ版）</h2>
+    <input type="text" id="keyword" placeholder="キーワード" value="アニメ">
+    <button onclick="search()">検索</button>
+    <div id="result"></div>
+    <div id="debug" class="debug" style="display:none;"></div>
+    
+    <script>
+    async function search() {
+        const resultDiv = document.getElementById('result');
+        const debugDiv = document.getElementById('debug');
+        
+        resultDiv.innerHTML = '検索中...';
+        debugDiv.style.display = 'block';
+        
+        const keyword = document.getElementById('keyword').value;
+        
+        try {
+            console.log('送信データ:', { keyword, siteId: 'entamade_jp', limit: 5 });
+            
+            const res = await fetch('https://asia-northeast1-blog-automation-system.cloudfunctions.net/searchProductsMultiSite', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    keyword: keyword,
+                    siteId: 'entamade_jp',
+                    limit: 5
+                })
+            });
+            
+            const data = await res.json();
+            
+            console.log('レスポンス:', data);
+            debugDiv.innerHTML = 'レスポンス:\n' + JSON.stringify(data, null, 2);
+            
+            if (data.success) {
+                resultDiv.innerHTML = `
+                    <h3>✅ 成功</h3>
+                    <p>サイト: ${data.siteName || '不明'}</p>
+                    <p>件数: ${data.totalCount || 0}件</p>
+                    <h4>商品リスト:</h4>
+                    ${data.products && data.products.length > 0 ? 
+                        data.products.map(p => `
+                            <div style="border:1px solid #ccc; padding:10px; margin:10px 0;">
+                                <strong>${p.title}</strong><br>
+                                価格: ${p.price}<br>
+                                ${p.imageUrl ? `<img src="${p.imageUrl}" style="width:100px;">` : ''}
+                            </div>
+                        `).join('') : 
+                        '<p>商品が見つかりませんでした</p>'
+                    }
+                `;
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h3>❌ エラー</h3>
+                        <p>${data.error || '不明なエラー'}</p>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('エラー:', error);
+            resultDiv.innerHTML = `<div class="error">通信エラー: ${error.message}</div>`;
+            debugDiv.innerHTML = 'エラー:\n' + error.toString();
+        }
+    }
+    </script>
+</body>
+</html>

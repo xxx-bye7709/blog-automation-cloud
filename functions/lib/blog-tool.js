@@ -8,6 +8,7 @@ class BlogTool {
   constructor(siteConfig = null) {
     const config = functions.config();
     
+    // サイト設定が渡された場合はそれを使用
     if (siteConfig) {
       console.log('🎯 Using custom site config:', siteConfig.name);
       this.wordpressUrl = siteConfig.xmlrpcUrl || `${siteConfig.url}/xmlrpc.php`;
@@ -15,22 +16,20 @@ class BlogTool {
       this.wordpressPassword = siteConfig.password;
       this.siteName = siteConfig.name;
       this.siteUrl = siteConfig.url;
-      this.siteId = siteConfig.id || 'entamade_jp';
+      this.siteId = siteConfig.id;
       
-      // DMM API設定（サイトごとに異なる場合）
-      this.dmmApiKey = siteConfig.dmmApiKey || config.dmm?.api_key;
-      this.dmmAffiliateId = siteConfig.dmmAffiliateId || config.dmm?.affiliate_id;
+      // DMM API設定（サイトごと）
+      this.dmmApiKey = siteConfig.dmmApiKey;
+      this.dmmAffiliateId = siteConfig.dmmAffiliateId;
     } else {
       // デフォルト設定（既存のコード）
-      console.log('🔍 Firebase config wordpress:', JSON.stringify(config.wordpress || {}, null, 2));
-      
       this.wordpressUrl = config.wordpress?.url || 'https://www.entamade.jp';
       this.wordpressUser = config.wordpress?.username || 'entamade';
       this.wordpressPassword = config.wordpress?.password || 'IChL 1yMu 4OUF YpL6 Wz8d oxln';
-      this.siteName = 'エンタメイド';
-      this.siteUrl = 'https://www.entamade.jp';
-      this.siteId = 'entamade_jp';
+      this.dmmApiKey = process.env.DMM_API_ID;
+      this.dmmAffiliateId = process.env.DMM_AFFILIATE_ID;
     }
+
     
     // OpenAI APIキーは共通
     this.openaiApiKey = config.openai?.api_key || process.env.OPENAI_API_KEY;
@@ -513,7 +512,7 @@ ${baseTemplate}
                   <value>
                     <array>
                       <data>
-                        <value><int>${categoryId}</int></value>
+                        <!-- <value><int>${categoryId}</int></value> -->
                       </data>
                     </array>
                   </value>
@@ -999,54 +998,60 @@ ${categoryData.topic}について、${year}年${month}月時点の最新情報�
 }
 
   // 商品レビュー記事生成
-  async generateProductReview(productData, keyword, options = {}) {
-    try {
-      console.log('🎯 Generating HIGH CVR product review article...');
-      console.log('Product data received:', JSON.stringify(productData, null, 2));
+async generateProductReview(productData, keyword, options = {}) {
+  try {
+    console.log('🎯 Generating HIGH CVR product review article...');
+    console.log('Product data received:', JSON.stringify(productData, null, 2));
+    
+    const products = Array.isArray(productData) ? productData : [productData];
+    
+    // ⭐ 動画URL確認（シンプル化）
+    console.log('🎬 Video check:', {
+      productCount: products.length,
+      hasVideoUrl: !!products[0]?.videoUrl,
+      hasContentId: !!products[0]?.contentId,
+      videoUrl: products[0]?.videoUrl || 'none'
+    });
+    
+    // アダルト検出
+    const strongAdultKeywords = ['糞', '尿', '肉便器', '陵辱', '強姦', '犯す', 'ロリ'];
+    const mediumAdultKeywords = ['ちんこ', 'まんこ', 'ズコズコ', 'ヌルヌル', 'ビチャビチャ'];
+    
+    let isExtremeContent = false;
+    for (const product of products) {
+      const title = product.title || '';
+      const description = product.description || '';
       
-      // 複数商品の処理
-      const products = Array.isArray(productData) ? productData : [productData];
-      console.log(`Processing ${products.length} products`);
+      const strongCount = strongAdultKeywords.filter(word => 
+        title.includes(word) || description.includes(word)
+      ).length;
       
-      // アダルト検出
-      const strongAdultKeywords = ['糞', '尿', '肉便器', '陵辱', '強姦', '犯す', 'ロリ'];
-      const mediumAdultKeywords = ['ちんこ', 'まんこ', 'ズコズコ', 'ヌルヌル', 'ビチャビチャ'];
+      const mediumCount = mediumAdultKeywords.filter(word => 
+        title.includes(word) || description.includes(word)
+      ).length;
       
-      let isExtremeContent = false;
-      for (const product of products) {
-        const title = product.title || '';
-        const description = product.description || '';
-        
-        const strongCount = strongAdultKeywords.filter(word => 
-          title.includes(word) || description.includes(word)
-        ).length;
-        
-        const mediumCount = mediumAdultKeywords.filter(word => 
-          title.includes(word) || description.includes(word)
-        ).length;
-        
-        if (strongCount >= 1 || mediumCount >= 3) {
-          isExtremeContent = true;
-          break;
-        }
+      if (strongCount >= 1 || mediumCount >= 3) {
+        isExtremeContent = true;
+        break;
       }
+    }
+    
+    console.log(`Adult content check: ${isExtremeContent ? '⚠️ Extreme' : '✅ Normal'}`);
+    
+    // 通常コンテンツの場合（OpenAI API使用）
+    if (!isExtremeContent) {
+      console.log('Generating with OpenAI API...');
       
-      console.log(`Adult content check: ${isExtremeContent ? '⚠️ Extreme' : '✅ Normal'}`);
-      
-      // 通常コンテンツの場合（OpenAI API使用）
-      if (!isExtremeContent) {
-        console.log('Generating with OpenAI API...');
-        
-        // 複数商品の情報をプロンプトに含める
-        const productsInfo = products.map((p, i) => `
+      // 複数商品の情報をプロンプトに含める
+      const productsInfo = products.map((p, i) => `
 商品${i + 1}:
 - 商品名: ${p.title || 'おすすめ商品'}
 - 価格: ${p.price || p.prices?.price || '価格不明'}
 - 評価: ${p.rating || p.review?.average || '4.5'}
 - 説明: ${p.description || ''}
 `).join('\n');
-        
-        const prompt = `
+      
+      const prompt = `
 あなたはCVR30%以上を達成するプロのアフィリエイトマーケターです。
 以下の${products.length}個の商品を紹介する魅力的なレビュー記事を作成してください。
 
@@ -1064,60 +1069,55 @@ HTMLタグを使用して視覚的に魅力的な記事を生成してくださ�
 コードブロックマーカー（\`\`\`）は使用しないでください。
 最後に不要な説明文は付けないでください。
 `;
-        
-        // OpenAI API呼び出し
-        const completion = await this.openai.chat.completions.create({
-          model: 'gpt-5-mini',
-          messages: [
-            {
-              role: 'system',
-              content: 'あなたはプロのアフィリエイトマーケターです。魅力的な商品レビュー記事を作成します。'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          max_completion_tokens: 4000
-        });
-        
-        console.log('OpenAI response length:', completion.choices[0].message.content.length);
+      
+      // OpenAI API呼び出し
+      const completion = await this.openai.chat.completions.create({
+        model: 'gpt-5-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'あなたはプロのアフィリエイトマーケターです。魅力的な商品レビュー記事を作成します。'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        max_completion_tokens: 4000
+      });
+      
+      console.log('OpenAI response length:', completion.choices[0].message.content.length);
 
-        // completionからcontentを取得してクリーンアップ
-        let content = completion.choices[0].message.content || '';
+      // completionからcontentを取得してクリーンアップ
+      let content = completion.choices[0].message.content || '';
 
-        // クリーンアップ処理
-        content = content
-          .replace(/```html\s*\n?/gi, '')
-          .replace(/```\s*\n?/gi, '')
-          .replace(/\*\*この.*?ください。?\*\*/gi, '')
-          .replace(/このHTML.*?ください。?/gi, '')
-          .replace(/このコード.*?ください。?/gi, '')
-          .replace(/ぜひご活用ください。?/gi, '')
-          .replace(/上記.*?ください。?/gi, '')
-          .replace(/以上.*?ください。?/gi, '')
-          .replace(/以下.*?活用.*?。?/gi, '')
-          .replace(/\n{3,}/g, '\n\n')
-          .replace(/^\s*$/gm, '')
-          .trim();
+      // クリーンアップ処理
+      content = content
+        .replace(/```html\s*\n?/gi, '')
+        .replace(/```\s*\n?/gi, '')
+        .replace(/\*\*この.*?ください。?\*\*/gi, '')
+        .replace(/このHTML.*?ください。?/gi, '')
+        .replace(/このコード.*?ください。?/gi, '')
+        .replace(/ぜひご活用ください。?/gi, '')
+        .replace(/上記.*?ください。?/gi, '')
+        .replace(/以上.*?ください。?/gi, '')
+        .replace(/以下.*?活用.*?。?/gi, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .replace(/^\s*$/gm, '')
+        .trim();
 
-        // ★改良版：動画サンプル付き商品セクションHTML
+      // ⭐ 商品セクションHTML（動画埋め込み改善版）
       const productsSectionHTML = `
 <h2 style="margin-top: 40px; color: #333;">📦 紹介商品詳細</h2>
 <div class="products-gallery">
 ${products.map((product, index) => {
-  const imageUrl = product.imageUrl || product.imageURL?.large || product.imageURL?.small || '';
-  const affiliateUrl = product.affiliateUrl || product.affiliateURL || product.url || '#';
-  const price = product.price || product.prices?.price || '価格不明';
+  const imageUrl = product.imageUrl || product.imageURL?.large || '';
+  const affiliateUrl = product.affiliateUrl || product.affiliateURL || '#';
+  const price = product.price || '価格不明';
   
-  // ★動画サンプルURL（複数サイズから選択）
-  const sampleMovieUrl = product.sampleMovieURL?.size_560_360 || 
-                        product.sampleMovieURL?.size_476_306 ||
-                        product.sampleMovieURL?.size_644_414 ||
-                        product.sampleMovie || '';
-  
-  // ★サンプル画像配列
-  const sampleImages = product.sampleImageURL?.sample_s || product.sampleImages || [];
+  // ⭐ 動画URL生成（確実に生成）
+  const videoUrl = product.videoUrl || 
+    (product.contentId ? `https://www.dmm.co.jp/litevideo/-/part/=/affi_id=entermaid-990/cid=${product.contentId}/size=720_480/` : null);
   
   return `
 <div style="margin: 30px 0; padding: 25px; border: 2px solid #4CAF50; border-radius: 12px; background: #f9f9f9;">
@@ -1125,101 +1125,40 @@ ${products.map((product, index) => {
     【商品${index + 1}】${product.title || '商品名'}
   </h3>
   
-  ${/* メイン画像 */
-  imageUrl ? `
+  ${imageUrl ? `
   <div style="text-align: center; margin: 20px 0;">
-    <img src="${imageUrl}" 
-         alt="${product.title || '商品画像'}" 
-         style="max-width: 100%; max-height: 400px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+    <img src="${imageUrl}" alt="${product.title}" style="max-width: 100%; max-height: 400px; border-radius: 8px;">
   </div>
   ` : ''}
   
-  ${/* ★無料動画サンプル埋め込み - DMMプレイヤー対応 */
-  sampleMovieUrl ? `
-  <div style="margin: 30px 0; padding: 20px; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.2);">
-    <h4 style="color: #fff; margin-bottom: 15px; text-align: center; font-size: 1.2em;">
-      🎬 無料サンプル動画をチェック
-    </h4>
-    <div style="position: relative; padding-top: 56.25%; background: #000; border-radius: 8px; overflow: hidden;">
+  ${/* ⭐ 動画埋め込み（レスポンシブ対応） */
+  videoUrl ? `
+  <div style="margin: 30px 0;">
+    <h4 style="text-align: center; color: #333; margin-bottom: 20px;">🎬 無料サンプル動画</h4>
+    <div style="width:100%; max-width:720px; margin: 0 auto; padding-top: 56.25%; position:relative; background: #000; border-radius: 8px;">
       <iframe 
-        src="${sampleMovieUrl}?aff_id=entermaid-990" 
-        style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;"
+        style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;" 
+        src="${videoUrl}" 
+        scrolling="no" 
         frameborder="0" 
-        allowfullscreen
-        scrolling="no">
+        allowfullscreen>
       </iframe>
     </div>
-    <p style="color: #ccc; font-size: 0.85em; text-align: center; margin-top: 10px;">
-      ※再生ボタンをクリックで視聴開始 | 全画面表示対応
-    </p>
-  </div>
-  ` : ''}
-  
-  ${/* ★サンプル画像ギャラリー */
-  sampleImages && sampleImages.length > 0 ? `
-  <div style="margin: 25px 0; padding: 15px; background: white; border-radius: 8px;">
-    <h4 style="color: #333; margin-bottom: 15px; font-size: 1.1em;">
-      📸 サンプル画像（${sampleImages.length}枚）
-    </h4>
-    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px;">
-      ${sampleImages.slice(0, 6).map((img, idx) => `
-        <div style="position: relative; padding-top: 150%; background: #f5f5f5; border-radius: 4px; overflow: hidden;">
-          <img src="${img}" 
-               style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; cursor: pointer;"
-               alt="サンプル画像${idx + 1}"
-               onclick="window.open('${img}', '_blank')">
-        </div>
-      `).join('')}
-    </div>
-    ${sampleImages.length > 6 ? `
     <p style="text-align: center; color: #666; margin-top: 10px; font-size: 0.9em;">
-      他${sampleImages.length - 6}枚のサンプル画像は商品ページでご覧いただけます
+      ※動画が表示されない場合は商品ページでご確認ください
     </p>
-    ` : ''}
   </div>
   ` : ''}
   
   <div style="background: white; padding: 15px; border-radius: 8px; margin: 15px 0;">
-    <p style="font-size: 1.4em; color: #e74c3c; font-weight: bold; margin: 10px 0;">
-      💰 価格: ${price}
-    </p>
-    ${product.listPrice && product.listPrice !== price ? `
-    <p style="color: #666;">
-      <span style="text-decoration: line-through;">定価: ${product.listPrice}</span>
-      <span style="color: #4CAF50; font-weight: bold; margin-left: 10px;">
-        ${Math.round((1 - parseFloat(price.replace(/[^0-9]/g, '')) / parseFloat(product.listPrice.replace(/[^0-9]/g, ''))) * 100)}%OFF！
-      </span>
-    </p>
-    ` : ''}
-    ${product.review?.average ? `
-    <p>⭐ 評価: ${product.review.average}/5.0 (${product.review.count}件のレビュー)</p>
-    ` : ''}
-    ${product.volume || product.duration ? `
-    <p>⏱ 収録時間: ${product.volume || product.duration}</p>
-    ` : ''}
-    ${product.date ? `
-    <p>📅 配信開始日: ${product.date}</p>
-    ` : ''}
-    ${product.iteminfo?.genre ? `
-    <p>📂 ジャンル: ${product.iteminfo.genre.map(g => g.name).join(', ')}</p>
-    ` : ''}
-    ${product.iteminfo?.actress ? `
-    <p>👤 出演: ${product.iteminfo.actress.map(a => a.name).join(', ')}</p>
-    ` : ''}
-    ${product.iteminfo?.director ? `
-    <p>🎬 監督: ${product.iteminfo.director.map(d => d.name).join(', ')}</p>
-    ` : ''}
-    ${product.iteminfo?.maker ? `
-    <p>🏢 メーカー: ${product.iteminfo.maker.map(m => m.name).join(', ')}</p>
-    ` : ''}
-    ${product.iteminfo?.label ? `
-    <p>🏷️ レーベル: ${product.iteminfo.label.map(l => l.name).join(', ')}</p>
-    ` : ''}
+    <p style="font-size: 1.4em; color: #e74c3c; font-weight: bold;">💰 価格: ${price}</p>
+    ${product.rating ? `<p>⭐ 評価: ${product.rating}/5.0</p>` : ''}
+    ${product.genre ? `<p>📂 ジャンル: ${product.genre}</p>` : ''}
+    ${product.actress ? `<p>👤 出演: ${product.actress}</p>` : ''}
   </div>
   
-  <!-- 購入ボタン（アフィリエイトID付き） -->
   <div style="text-align: center; margin-top: 25px;">
-    <a href="${affiliateUrl}${affiliateUrl.includes('?') ? '&' : '?'}aff_id=entermaid-990" 
+    <a href="${affiliateUrl}" 
        target="_blank" 
        rel="noopener noreferrer"
        style="display: inline-block; 
@@ -1230,71 +1169,41 @@ ${products.map((product, index) => {
               border-radius: 50px; 
               font-size: 1.2em; 
               font-weight: bold;
-              box-shadow: 0 6px 20px rgba(255,107,107,0.4);
-              transition: all 0.3s;">
-      🛒 詳細を見る・今すぐ購入
+              box-shadow: 0 6px 20px rgba(255,107,107,0.4);">
+      🛒 詳細を見る・購入する
     </a>
   </div>
-  
-  ${/* 動画があれば追加CTA */
-  sampleMovieUrl ? `
-  <div style="text-align: center; margin-top: 15px;">
-    <p style="color: #666; font-size: 0.9em;">
-      ↑ サンプル動画を見て気に入ったらぜひチェック！
-    </p>
-  </div>
-  ` : ''}
 </div>
 `;
 }).join('\n')}
 </div>
-
-<!-- 購入前の注意事項 -->
-<div style="margin-top: 40px; padding: 20px; background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%); border-radius: 12px; border: 2px solid #ff9800;">
-  <h4 style="margin-top: 0; color: #e65100;">💡 ご購入前のご案内</h4>
-  <ul style="margin: 10px 0; padding-left: 20px; color: #424242; line-height: 1.8;">
-    <li>価格や在庫状況は変動する場合があります</li>
-    <li>詳細情報は各商品ページでご確認ください</li>
-    <li>動画サンプルは一部のみの公開です</li>
-    <li>購入後のダウンロード方法は商品ページをご確認ください</li>
-    ${products.length > 1 ? '<li>複数購入の場合はまとめ買い割引が適用される場合があります</li>' : ''}
-  </ul>
-</div>
 `;
-
-      content = content + '\n\n' + productsSectionHTML + `
-<!-- ========== 商品エリア完全終了 ========== -->
-<div style="clear: both; display: block; height: 100px; width: 100%;"></div>
-<!-- ========== 以下、オープンチャットCTAエリア ========== -->
-`;
-
-        // タイトル生成
-        const reviewCount = products[0].reviewCount || products[0].review?.count || '364';
-        const title = products.length > 1 ? 
-          `【${products.length}選】${keyword}のおすすめ商品を徹底比較！${new Date().getFullYear()}年最新版` :
-          `【${reviewCount}人が購入】${products[0].title?.substring(0, 30)}...の詳細レビュー｜${keyword}`;
-        
-        console.log('Article generated successfully');
-        console.log('💬 オープンチャットCTAを追加');
-        console.log('CTA追加前のコンテンツ長:', content.length);
-        const contentWithCTA = addOpenChatCTAToArticle(content);
-        console.log('CTA追加後のコンテンツ長:', contentWithCTA.length);
-        console.log('差分:', contentWithCTA.length - content.length);
-        
-        return {
-          title: title,
-          content: contentWithCTA, 
-          category: 'レビュー',
-          tags: [keyword, 'レビュー', '比較', 'おすすめ', `${new Date().getFullYear()}年`],
-          status: 'draft',
-          isProductReview: true,
-          products: products
-        };
-      }
       
-      // 過激なコンテンツの場合（セーフテンプレート）
-      console.log('Using safe template for extreme content');
-      const safeContent = `
+      content = content + '\n\n' + productsSectionHTML;
+      
+      // オープンチャットCTA追加
+      const contentWithCTA = addOpenChatCTAToArticle(content);
+      
+      const title = products.length > 1 ? 
+        `【${products.length}選】${keyword}のおすすめ商品を徹底比較！` :
+        `【レビュー】${products[0].title?.substring(0, 30)}...｜${keyword}`;
+      
+      console.log('✅ Article generated successfully');
+      
+      return {
+        title: title,
+        content: contentWithCTA,
+        category: 'レビュー',
+        tags: [keyword, 'レビュー', 'おすすめ'],
+        status: 'draft',
+        isProductReview: true,
+        products: products
+      };
+    }
+    
+    // 過激なコンテンツの場合（セーフテンプレート）
+    console.log('Using safe template for extreme content');
+    const safeContent = `
 <div style="max-width: 900px; margin: 0 auto; padding: 20px;">
   <h2>【${keyword}】カテゴリーの人気商品</h2>
   
@@ -1309,23 +1218,31 @@ ${products.map((product, index) => {
   </div>`).join('')}
 </div>`;
 
-      const safeContentWithCTA = addOpenChatCTAToArticle(safeContent);
-      
-      return {
-        title: `【${keyword}】人気商品まとめ`,
-        content: safeContentWithCTA,
-        category: 'レビュー',
-        tags: [keyword, 'まとめ'],
-        status: 'draft',
-        isProductReview: true,
-        products: products
-      };
-      
-    } catch (error) {
-      console.error('❌ Error in generateProductReview:', error);
-      throw error;
-    }
+    const safeContentWithCTA = addOpenChatCTAToArticle(safeContent);
+    
+    // ★セーフテンプレートでも最終ログ
+    console.log('Article content summary (safe template):', {
+      title: `【${keyword}】人気商品まとめ`,
+      contentLength: safeContentWithCTA.length,
+      productCount: products.length,
+      isExtremeContent: true
+    });
+    
+    return {
+      title: `【${keyword}】人気商品まとめ`,
+      content: safeContentWithCTA,
+      category: 'レビュー',
+      tags: [keyword, 'まとめ'],
+      status: 'draft',
+      isProductReview: true,
+      products: products
+    };
+    
+  } catch (error) {
+    console.error('❌ Error in generateProductReview:', error);
+    throw error;
   }
+}
 
   // タグ生成の改善
 generateTags(keyword, category, productTitle) {

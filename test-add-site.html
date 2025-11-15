@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>WordPress サイト管理</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+        .panel {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; margin-bottom: 30px; }
+        h2 { color: #555; margin-bottom: 20px; }
+        .form-group { margin-bottom: 20px; }
+        label { 
+            display: block; 
+            margin-bottom: 8px; 
+            font-weight: 600;
+            color: #555;
+        }
+        input, select { 
+            width: 100%; 
+            padding: 10px; 
+            border: 1px solid #ddd; 
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button { 
+            background: #4CAF50; 
+            color: white; 
+            padding: 12px 24px; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        button:hover { background: #45a049; }
+        .optional { color: #999; font-size: 0.85em; }
+        .result { 
+            margin-top: 20px; 
+            padding: 15px; 
+            border-radius: 4px;
+            display: none;
+        }
+        .success { 
+            background: #d4edda; 
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error { 
+            background: #f8d7da; 
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .site-list {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .site-item {
+            background: #f9f9f9;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border-left: 4px solid #4CAF50;
+        }
+        .site-item.disabled {
+            border-left-color: #ccc;
+            opacity: 0.6;
+        }
+        .site-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .site-url {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .site-meta {
+            color: #999;
+            font-size: 0.85em;
+            margin-top: 5px;
+        }
+        .loading {
+            text-align: center;
+            color: #666;
+            padding: 20px;
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+        }
+        .checkbox-group input {
+            width: auto;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚀 WordPress サイト管理システム</h1>
+    
+    <div class="container">
+        <!-- 左側：新規追加フォーム -->
+        <div class="panel">
+            <h2>➕ 新規サイト追加</h2>
+            
+            <form id="addSiteForm">
+                <div class="form-group">
+                    <label>サイトID <span class="optional">（英数字とアンダースコアのみ）</span></label>
+                    <input type="text" id="siteId" required placeholder="例: mysite_jp">
+                </div>
+                
+                <div class="form-group">
+                    <label>サイト名</label>
+                    <input type="text" id="name" required placeholder="例: マイブログ">
+                </div>
+                
+                <div class="form-group">
+                    <label>サイトURL</label>
+                    <input type="url" id="url" required placeholder="https://example.com">
+                </div>
+                
+                <div class="form-group">
+                    <label>WordPressユーザー名</label>
+                    <input type="text" id="username" required placeholder="admin">
+                </div>
+                
+                <div class="form-group">
+                    <label>WordPressアプリケーションパスワード</label>
+                    <input type="password" id="password" required placeholder="xxxx xxxx xxxx xxxx xxxx xxxx">
+                </div>
+                
+                <div class="form-group">
+                    <label>DMM API ID <span class="optional">（オプション）</span></label>
+                    <input type="text" id="dmmApiKey" placeholder="DMM API キー">
+                </div>
+                
+                <div class="form-group">
+                    <label>DMMアフィリエイトID <span class="optional">（オプション）</span></label>
+                    <input type="text" id="dmmAffiliateId" placeholder="affiliate-xxx">
+                </div>
+                
+                <div class="checkbox-group">
+                    <input type="checkbox" id="skipTest" checked>
+                    <label for="skipTest">接続テストをスキップ（推奨）</label>
+                </div>
+                
+                <button type="submit">サイトを追加</button>
+                
+                <div id="addResult" class="result"></div>
+            </form>
+        </div>
+        
+        <!-- 右側：サイト一覧 -->
+        <div class="panel">
+            <h2>📋 登録済みサイト一覧</h2>
+            
+            <div id="siteList" class="site-list">
+                <div class="loading">読み込み中...</div>
+            </div>
+            
+            <button onclick="loadSites()" style="margin-top: 20px; width: 100%;">
+                🔄 リスト更新
+            </button>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = 'https://asia-northeast1-blog-automation-system.cloudfunctions.net';
+        
+        // サイト一覧を読み込み
+        async function loadSites() {
+            const listDiv = document.getElementById('siteList');
+            listDiv.innerHTML = '<div class="loading">読み込み中...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/getWordPressSites`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    listDiv.innerHTML = '';
+                    data.sites.forEach(site => {
+                        const siteDiv = document.createElement('div');
+                        siteDiv.className = `site-item ${!site.enabled ? 'disabled' : ''}`;
+                        siteDiv.innerHTML = `
+                            <div class="site-name">${site.name} (${site.id})</div>
+                            <div class="site-url">${site.url}</div>
+                            <div class="site-meta">
+                                優先度: ${site.priority} | 
+                                DMM: ${site.dmmApiKey ? '✅' : '❌'} | 
+                                状態: ${site.enabled ? '有効' : '無効'}
+                            </div>
+                        `;
+                        listDiv.appendChild(siteDiv);
+                    });
+                } else {
+                    listDiv.innerHTML = '<div class="error">読み込みエラー</div>';
+                }
+            } catch (error) {
+                listDiv.innerHTML = `<div class="error">エラー: ${error.message}</div>`;
+            }
+        }
+        
+        // フォーム送信処理
+        document.getElementById('addSiteForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const resultDiv = document.getElementById('addResult');
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'result loading';
+            resultDiv.innerHTML = '追加中...';
+            
+            const data = {
+                siteId: document.getElementById('siteId').value,
+                name: document.getElementById('name').value,
+                url: document.getElementById('url').value,
+                username: document.getElementById('username').value,
+                password: document.getElementById('password').value,
+                dmmApiKey: document.getElementById('dmmApiKey').value || '',
+                dmmAffiliateId: document.getElementById('dmmAffiliateId').value || '',
+                skipConnectionTest: document.getElementById('skipTest').checked,
+                categories: ['entertainment', 'anime', 'game']
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/addWordPressSite`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <h3>✅ 追加成功！</h3>
+                        <p>${result.message}</p>
+                        <p>サイトID: ${result.siteId}</p>
+                        <p>優先度: ${result.priority}</p>
+                        <p>${result.note}</p>
+                    `;
+                    document.getElementById('addSiteForm').reset();
+                    document.getElementById('skipTest').checked = true;
+                    // サイト一覧を更新
+                    setTimeout(loadSites, 1000);
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = `
+                        <h3>❌ エラー</h3>
+                        <p>${result.error}</p>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `
+                    <h3>❌ 通信エラー</h3>
+                    <p>${error.message}</p>
+                `;
+            }
+        });
+        
+        // ページ読み込み時にサイト一覧を取得
+        window.addEventListener('load', loadSites);
+    </script>
+</body>
+</html>

@@ -1797,7 +1797,7 @@ exports.generateProductReview = functions
   .https.onRequest(async (req, res) => {
     console.log('=== generateProductReview START ===');
     
-    // CORS設定
+    // CORS設定（最初に設定）
     res.set('Access-Control-Allow-Origin', '*');
     res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.set('Access-Control-Allow-Headers', 'Content-Type');
@@ -1808,39 +1808,47 @@ exports.generateProductReview = functions
       return;
     }
 
+    // ★ リクエストデータの詳細ログ
+    console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
+    console.log('📦 Request method:', req.method);
+    
     try {
       const BlogTool = require('./lib/blog-tool');
       const blogTool = new BlogTool();
       
       const requestData = req.body || {};
       
+      // ★ 受信データの詳細確認
+      console.log('📦 Received data structure:', {
+        hasProducts: !!requestData.products,
+        hasProduct: !!requestData.product,
+        productsLength: requestData.products?.length,
+        firstProductKeys: requestData.products?.[0] ? Object.keys(requestData.products[0]) : 'no products',
+        hasSampleMovieURL: !!requestData.products?.[0]?.sampleMovieURL
+      });
+      
       const {
-        products = [],  // ⭐ 複数商品配列に変更
+        products = [],
         keyword = 'レビュー',
         autoPost = true
       } = requestData;
 
-      // 後方互換性のため、productsToProcess[0]?も確認
+      // 後方互換性
       const productsToProcess = products.length > 0 ? products : 
-                         requestData.product ? [requestData.product] : [];
+                               requestData.product ? [requestData.product] : [];
 
       console.log(`📦 Processing ${productsToProcess.length} products`);
       
-      console.log('Product data received:', {
-  hasTitle: !!productsToProcess[0]?.title,
-  hasPrice: !!productsToProcess[0]?.price,
-  hasImageUrl: !!productsToProcess[0]?.imageUrl,
-  hasAffiliateUrl: !!productsToProcess[0]?.affiliateUrl
-});
+      // 以下、既存の処理を続ける（重複部分は削除）
       
       // 記事生成
       const article = await blogTool.generateProductReview(
-        productsToProcess,  // 配列を渡す
-          keyword,
-          { autoPost }
-        );
+        productsToProcess,
+        keyword,
+        { autoPost }
+      );
 
-      // 複数商品のHTMLセクションを生成して追加
+      // 複数商品のHTMLセクション生成
       if (productsToProcess.length > 0) {
         const productHTML = generateProductSection(productsToProcess, 'review');
         article.content = article.content + '\n\n' + productHTML;
@@ -1897,6 +1905,31 @@ if (imageUrl) {
       } else {
         console.log('⚠️ No image URL provided');
       }
+
+      const sampleVideoUrl = productsToProcess[0]?.sampleMovie || 
+                       productsToProcess[0]?.sampleMovieURL?.size_560_360 ||
+                       productsToProcess[0]?.sampleMovieURL?.size_476_306;
+
+if (sampleVideoUrl) {
+  console.log('🎬 Inserting sample video:', sampleVideoUrl);
+  
+  const videoHtml = `
+<div class="sample-video" style="text-align: center; margin: 40px 0; padding: 30px; background: #f5f5f5; border-radius: 12px;">
+  <h3 style="margin-bottom: 20px;">📹 動画プレビュー</h3>
+  <video controls autoplay muted loop style="max-width: 100%; width: 560px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+    <source src="${sampleVideoUrl}" type="video/mp4">
+  </video>
+</div>`;
+  
+  // 記事の適切な位置に動画を挿入
+  const h3End = article.content.indexOf('</h3>');
+  if (h3End !== -1) {
+    article.content = 
+      article.content.slice(0, h3End + 5) + 
+      videoHtml + 
+      article.content.slice(h3End + 5);
+  }
+}
       
       // ★アフィリエイトボタン（複数箇所に配置）
       const affiliateUrl = productsToProcess[0]?.affiliateUrl || productsToProcess[0]?.affiliateURL || productsToProcess[0]?.url;
@@ -1996,7 +2029,8 @@ if (imageUrl) {
         postId: postResult.postId || null,
         postUrl: postResult.url || null,
         postSuccess: postResult.success || false,
-        hasImage: !!imageUrl,
+        hasImage: !!productsToProcess[0]?.imageUrl,
+        hasSampleMovie: !!productsToProcess[0]?.sampleMovieURL,
         message: postResult.success ? 'Posted successfully' : 'Article generated but posting failed',
         postError: postResult.error || null
       };
@@ -2239,13 +2273,12 @@ exports.searchProductsForDashboard = functions
   .region('asia-northeast1')
   .runWith({ timeoutSeconds: 60 })
   .https.onRequest(async (req, res) => {
-    // CORS設定（ダッシュボードからのアクセスを許可）
     const cors = require('cors')({ 
       origin: [
         'http://localhost:3000',
         'http://localhost:3001', 
         'https://blog-dashboard.vercel.app',
-        'https://blog-dashboard-*.vercel.app', // プレビューURL用
+        'https://blog-dashboard-*.vercel.app',
         'https://www.entamade.jp'
       ],
       credentials: true 
@@ -2264,7 +2297,6 @@ exports.searchProductsForDashboard = functions
         
         console.log(`Dashboard product search: ${keyword}, limit: ${limit}, page: ${page}`);
         
-        // DMM API呼び出し
         const axios = require('axios');
         const dmmParams = {
           api_id: process.env.DMM_API_ID,
@@ -2275,7 +2307,7 @@ exports.searchProductsForDashboard = functions
           keyword: keyword,
           hits: parseInt(limit),
           offset: (parseInt(page) - 1) * parseInt(limit) + 1,
-          sort: '-rank', // 人気順
+          sort: '-rank',
           output: 'json'
         };
         
@@ -2291,30 +2323,45 @@ exports.searchProductsForDashboard = functions
           totalCount = dmmResponse.data.result.result_count || 0;
           
           if (dmmResponse.data.result.items) {
-            products = dmmResponse.data.result.items.map((item, index) => ({
-              id: item.content_id || `${keyword}_${page}_${index}`,
-              contentId: item.content_id,
-              productId: item.product_id,
-              title: item.title || '商品名不明',
-              price: item.prices?.price || item.price || '価格不明',
-              listPrice: item.prices?.list_price || null,
-              imageUrl: item.imageURL?.large || item.imageURL?.small || null,
-              thumbnailUrl: item.imageURL?.small || item.imageURL?.list || null,
-              affiliateUrl: item.affiliateURL || item.URL,
-              description: item.iteminfo?.series?.[0]?.name || 
-                          item.iteminfo?.label?.[0]?.name || 
-                          item.comment || '',
-              maker: item.iteminfo?.maker?.[0]?.name || '',
-              genre: item.iteminfo?.genre?.map(g => g.name).join(', ') || '',
-              actress: item.iteminfo?.actress?.map(a => a.name).join(', ') || '',
-              director: item.iteminfo?.director?.[0]?.name || '',
-              rating: item.review?.average || 0,
-              reviewCount: item.review?.count || 0,
-              releaseDate: item.date || '',
-              duration: item.volume || '',
-              sampleImages: item.sampleImageURL?.sample_s || [],
-              sampleMovie: item.sampleMovieURL?.size_560_360 || null
-            }));
+            products = dmmResponse.data.result.items.map((item, index) => {
+              const contentId = item.content_id || item.product_id;
+              
+              // ⭐ 動画URLを確実に生成（APIが返さない場合でも）
+              const videoUrl = contentId ? 
+                `https://www.dmm.co.jp/litevideo/-/part/=/affi_id=entermaid-990/cid=${contentId}/size=720_480/` : null;
+              
+              return {
+                id: contentId || `${keyword}_${page}_${index}`,
+                contentId: contentId,
+                productId: item.product_id,
+                title: item.title || '商品名不明',
+                price: item.prices?.price || item.price || '価格不明',
+                listPrice: item.prices?.list_price || null,
+                imageUrl: item.imageURL?.large || item.imageURL?.small || null,
+                thumbnailUrl: item.imageURL?.small || item.imageURL?.list || null,
+                affiliateUrl: item.affiliateURL || item.URL,
+                description: item.iteminfo?.series?.[0]?.name || 
+                            item.iteminfo?.label?.[0]?.name || 
+                            item.comment || '',
+                maker: item.iteminfo?.maker?.[0]?.name || '',
+                genre: item.iteminfo?.genre?.map(g => g.name).join(', ') || '',
+                actress: item.iteminfo?.actress?.map(a => a.name).join(', ') || '',
+                director: item.iteminfo?.director?.[0]?.name || '',
+                rating: item.review?.average || 0,
+                reviewCount: item.review?.count || 0,
+                releaseDate: item.date || '',
+                duration: item.volume || '',
+                sampleImages: item.sampleImageURL?.sample_s || [],
+                
+                // ⭐ シンプルな動画URL設定
+                videoUrl: videoUrl,  // 自動生成された動画URL
+                hasVideo: !!contentId,  // 動画の有無フラグ
+                
+                // 後方互換性のために残す
+                sampleMovie: item.sampleMovieURL?.size_560_360 || videoUrl,
+                sampleMovieURL: item.sampleMovieURL || { size_720_480: videoUrl }
+              };
+            });
           }
         }
         
@@ -2563,6 +2610,12 @@ ${p.description}
 // ===== 3. ヘルパー関数: 商品セクションHTML生成 =====
 // index.js の generateProductSection 関数を修正（1834行目付近）
 function generateProductSection(products, articleType) {
+  // generateProductSectionWithVideoを呼び出す
+  return generateProductSectionWithVideo(products, articleType);
+}
+
+// ===== 3. ヘルパー関数: 商品セクションHTML生成（動画対応版） =====
+function generateProductSectionWithVideo(products, articleType) {
   const sectionTitle = articleType === 'ranking' 
     ? '🏆 ランキング詳細' 
     : articleType === 'comparison'
@@ -2573,100 +2626,56 @@ function generateProductSection(products, articleType) {
 <h2>${sectionTitle}</h2>
 <div class="product-list" style="margin-top: 30px;">
 ${products.map((p, index) => {
-  const rankBadge = articleType === 'ranking' 
-    ? `<span style="position: absolute; top: -10px; left: -10px; background: linear-gradient(45deg, #FFD700, #FFA500); color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">${index + 1}</span>`
-    : '';
-  
-  const borderColor = articleType === 'ranking' && index === 0 
-    ? '#FFD700' 
-    : articleType === 'ranking' && index === 1
-    ? '#C0C0C0'
-    : articleType === 'ranking' && index === 2
-    ? '#CD7F32'
-    : '#4CAF50';
-  
-  // ★修正: affiliateUrlの存在チェックを追加
   const affiliateUrl = p.affiliateUrl || p.affiliateURL || p.url || '#';
   const imageUrl = p.imageUrl || p.imageURL || p.thumbnailUrl || '';
   
+  // ★動画埋め込みHTML（重要）
+  const videoHtml = p.sampleMovieURL && (p.sampleMovieURL.size_560_360 || p.sampleMovieURL.size_476_306) ? `
+  <div style="margin: 25px 0; padding: 20px; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); border-radius: 8px;">
+    <h4 style="color: #fff; margin-bottom: 15px; text-align: center;">
+      🎬 無料サンプル動画
+    </h4>
+    <div style="position: relative; padding-top: 56.25%;">
+      <iframe 
+        src="${p.sampleMovieURL.size_560_360 || p.sampleMovieURL.size_476_306}" 
+        style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
+        frameborder="0" 
+        allowfullscreen>
+      </iframe>
+    </div>
+  </div>
+  ` : '';
+  
   return `
-<div class="product-item" style="margin-bottom: 30px; padding: 25px; border: 3px solid ${borderColor}; border-radius: 12px; background: linear-gradient(135deg, #ffffff 0%, #f9f9f9 100%); position: relative; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-  ${rankBadge}
-  <div style="display: flex; gap: 20px; ${articleType === 'ranking' && index < 3 ? 'margin-left: 20px;' : ''}">
-    ${imageUrl ? `
-    <div style="flex-shrink: 0;">
-      <img src="${imageUrl}" alt="${p.title || ''}" style="max-width: 220px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
-    </div>
-    ` : ''}
-    <div style="flex-grow: 1;">
-      <h3 style="margin-top: 0; color: #333; font-size: 1.3em; line-height: 1.4;">
-        ${articleType === 'ranking' ? `【第${index + 1}位】` : `【Pick ${index + 1}】`}
-        ${p.title || '商品名不明'}
-      </h3>
-      
-      <div style="display: flex; align-items: center; gap: 20px; margin: 15px 0;">
-        <span style="font-size: 1.5em; color: #ff4444; font-weight: bold;">
-          💰 ${p.price || '価格不明'}
-        </span>
-        ${p.listPrice && p.listPrice !== p.price ? `
-        <span style="text-decoration: line-through; color: #999;">
-          ${p.listPrice}
-        </span>
-        ` : ''}
-      </div>
-      
-      ${p.rating && p.rating > 0 ? `
-      <div style="margin: 10px 0;">
-        <span style="color: #FFA500; font-size: 1.1em;">
-          ${'⭐'.repeat(Math.round(p.rating))} ${p.rating}/5.0
-        </span>
-        <span style="color: #666; margin-left: 10px;">
-          (${p.reviewCount || 0}件のレビュー)
-        </span>
-      </div>
-      ` : ''}
-      
-      <div style="margin: 15px 0; padding: 15px; background: #f5f5f5; border-radius: 8px;">
-        ${p.genre ? `<p style="margin: 5px 0;"><strong>📂 ジャンル:</strong> ${p.genre}</p>` : ''}
-        ${p.maker ? `<p style="margin: 5px 0;"><strong>🏢 メーカー:</strong> ${p.maker}</p>` : ''}
-        ${p.actress ? `<p style="margin: 5px 0;"><strong>👤 出演:</strong> ${p.actress}</p>` : ''}
-        ${p.director ? `<p style="margin: 5px 0;"><strong>🎬 監督:</strong> ${p.director}</p>` : ''}
-        ${p.duration ? `<p style="margin: 5px 0;"><strong>⏱ 収録時間:</strong> ${p.duration}</p>` : ''}
-        ${p.releaseDate ? `<p style="margin: 5px 0;"><strong>📅 発売日:</strong> ${p.releaseDate}</p>` : ''}
-      </div>
-      
-      ${p.description ? `
-      <div style="margin: 15px 0; padding: 10px; background: #fff; border-left: 4px solid ${borderColor};">
-        <p style="margin: 0; color: #555; line-height: 1.6;">${p.description}</p>
-      </div>
-      ` : ''}
-      
-      <div style="margin-top: 20px;">
-        <a href="${affiliateUrl}" target="_blank" rel="noopener noreferrer" 
-           style="display: inline-block; padding: 14px 40px; background: linear-gradient(45deg, ${borderColor}, ${borderColor}dd); 
-                  color: white; text-decoration: none; border-radius: 30px; 
-                  font-weight: bold; font-size: 1.1em; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-                  transition: transform 0.3s, box-shadow 0.3s;">
-          🛒 詳細を見る・購入する
-        </a>
-      </div>
-    </div>
+<div class="product-item" style="margin-bottom: 30px; padding: 25px; border: 3px solid #4CAF50; border-radius: 12px;">
+  <h3>${articleType === 'ranking' ? `【第${index + 1}位】` : `【商品${index + 1}】`} ${p.title || '商品名'}</h3>
+  
+  ${imageUrl ? `
+  <div style="text-align: center; margin: 20px 0;">
+    <img src="${imageUrl}" alt="${p.title || ''}" style="max-width: 300px;">
+  </div>
+  ` : ''}
+  
+  <p><strong>価格:</strong> ${p.price || '価格不明'}</p>
+  ${p.genre ? `<p><strong>ジャンル:</strong> ${p.genre}</p>` : ''}
+  ${p.rating > 0 ? `<p><strong>評価:</strong> ⭐${p.rating}/5.0</p>` : ''}
+  
+  ${videoHtml}
+  
+  <div style="text-align: center; margin-top: 20px;">
+    <a href="${affiliateUrl}" target="_blank" rel="noopener noreferrer" 
+       style="display: inline-block; padding: 14px 40px; background: #4CAF50; 
+              color: white; text-decoration: none; border-radius: 30px; 
+              font-weight: bold;">
+      🛒 詳細を見る
+    </a>
   </div>
 </div>
 `;
 }).join('')}
 </div>
-
-<div style="margin-top: 40px; padding: 20px; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 12px; border: 2px solid #0ea5e9;">
-  <h4 style="margin-top: 0; color: #0369a1;">💡 ご購入前のご案内</h4>
-  <ul style="margin: 10px 0; padding-left: 20px; color: #334155;">
-    <li>価格や在庫状況は変動する場合があります</li>
-    <li>詳細情報は各商品ページでご確認ください</li>
-    <li>レビュー評価は購入者の個人的な感想です</li>
-    ${products.length > 1 ? '<li>複数購入の場合は送料がお得になる場合があります</li>' : ''}
-  </ul>
-</div>
 `;
+}
   
 // index.jsの最後に以下の関数を追加してください
 
@@ -3067,6 +3076,102 @@ exports.testSimplePost = functions
     }
   });
 
+  // 動画検出テスト関数
+exports.testVideoDetection = functions
+  .region('asia-northeast1')
+  .https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    
+    try {
+      const BlogTool = require('./lib/blog-tool');
+      const blogTool = new BlogTool();
+      
+      // テスト用商品データ（動画あり）
+      const testProduct = {
+        title: "テスト商品",
+        price: "2980円",
+        sampleMovieURL: {
+          size_560_360: "https://example.com/sample_560.mp4",
+          size_476_306: "https://example.com/sample_476.mp4"
+        }
+      };
+      
+      // 動画URL検出テスト
+      const sampleMovieUrl = testProduct.sampleMovieURL?.size_560_360 || 
+                             testProduct.sampleMovieURL?.size_476_306 ||
+                             testProduct.sampleMovieURL?.size_644_414 ||
+                             testProduct.sampleMovie || 
+                             null;
+      
+      res.json({
+        success: true,
+        hasVideo: !!sampleMovieUrl,
+        videoUrl: sampleMovieUrl,
+        productData: testProduct
+      });
+      
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        error: error.message 
+      });
+    }
+  });
+
+// DMM商品データ構造確認関数
+exports.debugProductData = functions
+  .region('asia-northeast1')
+  .https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    
+    try {
+      const axios = require('axios');
+      const functions = require('firebase-functions');
+      
+      // DMM API呼び出し
+      const dmmParams = {
+        api_id: process.env.DMM_API_ID || functions.config().dmm?.api_id,
+        affiliate_id: process.env.DMM_AFFILIATE_ID || functions.config().dmm?.affiliate_id,
+        site: 'FANZA',
+        service: 'digital',
+        floor: 'videoa',
+        keyword: req.query.keyword || 'テスト',
+        hits: 1,
+        output: 'json'
+      };
+      
+      console.log('DMM API params:', dmmParams);
+      
+      const response = await axios.get('https://api.dmm.com/affiliate/v3/ItemList', {
+        params: dmmParams,
+        timeout: 10000
+      });
+      
+      const item = response.data?.result?.items?.[0];
+      
+      res.json({
+        success: true,
+        keyword: req.query.keyword || 'テスト',
+        hasSampleMovieURL: !!item?.sampleMovieURL,
+        sampleMovieURLKeys: item?.sampleMovieURL ? Object.keys(item.sampleMovieURL) : [],
+        sampleMovieURL: item?.sampleMovieURL,
+        imageURL: item?.imageURL,
+        title: item?.title,
+        price: item?.prices,
+        // フル商品データ（デバッグ用）
+        fullItem: item
+      });
+      
+    } catch (error) {
+      console.error('Debug error:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: error.message,
+        details: error.response?.data
+      });
+    }
+  });
+
 // ========================================
 // ヘルパー関数
 // ========================================
@@ -3173,7 +3278,6 @@ function generateArticleContent(products, articleType, keyword) {
       res.status(500).json({ error: error.message });
     }
   });
-  }
 
   //checkConfig関数を追加
   exports.checkConfig = functions
@@ -3482,3 +3586,556 @@ exports.getSiteStats = functions
   });
 
 
+// ========================================
+// 新規WordPress サイト追加機能
+// ========================================
+
+// WordPress サイト追加（接続テストをオプション化）
+exports.addWordPressSite = functions
+  .region('asia-northeast1')
+  .runWith({ timeoutSeconds: 60 })
+  .https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    
+    try {
+      const {
+        siteId, name, url, username, password,
+        dmmApiKey, dmmAffiliateId, categories,
+        skipConnectionTest = true  // デフォルトでスキップ
+      } = req.body;
+      
+      // バリデーション
+      if (!siteId || !name || !url || !username || !password) {
+        return res.status(400).json({
+          success: false,
+          error: '必須フィールドが不足しています'
+        });
+      }
+      
+      // サイトIDの重複チェック
+      const existingDoc = await admin.firestore()
+        .collection('wordpress_sites')
+        .doc(siteId)
+        .get();
+      
+      if (existingDoc.exists) {
+        return res.status(400).json({
+          success: false,
+          error: 'このサイトIDは既に使用されています'
+        });
+      }
+      
+      // 優先度の自動設定（既存サイト数 + 1）
+      const sitesSnapshot = await admin.firestore()
+        .collection('wordpress_sites')
+        .get();
+      const newPriority = sitesSnapshot.size + 1;
+      
+      // Firestoreに保存
+      await admin.firestore()
+        .collection('wordpress_sites')
+        .doc(siteId)
+        .set({
+          name,
+          url,
+          xmlrpcUrl: `${url}/xmlrpc.php`,
+          username,
+          password,
+          dmmApiKey: dmmApiKey || '',
+          dmmAffiliateId: dmmAffiliateId || '',
+          categories: categories || ['entertainment', 'anime', 'game'],
+          enabled: true,
+          isDefault: false,
+          priority: newPriority,
+          postCount: 0,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      
+      console.log(`✅ Site added: ${siteId} (${name})`);
+      
+      res.json({
+        success: true,
+        message: `サイト「${name}」が正常に追加されました`,
+        siteId: siteId,
+        priority: newPriority,
+        note: skipConnectionTest ? '接続テストはスキップされました' : '接続テスト済み'
+      });
+      
+    } catch (error) {
+      console.error('Error adding site:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+// WordPress接続テスト関数
+async function testWordPressConnection(url, username, password) {
+  const https = require('https');
+  
+  const xmlPayload = `<?xml version="1.0"?>
+<methodCall>
+  <methodName>wp.getUsersBlogs</methodName>
+  <params>
+    <param><value><string>${username}</string></value></param>
+    <param><value><string>${password}</string></value></param>
+  </params>
+</methodCall>`;
+  
+  return new Promise((resolve) => {
+    try {
+      const siteUrl = new URL(url);
+      const req = https.request({
+        hostname: siteUrl.hostname,
+        port: 443,
+        path: '/xmlrpc.php',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/xml',
+          'Content-Length': Buffer.byteLength(xmlPayload)
+        },
+        timeout: 10000
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          if (res.statusCode === 200 && !data.includes('faultCode')) {
+            resolve({ success: true });
+          } else {
+            resolve({ success: false, error: 'Authentication failed' });
+          }
+        });
+      });
+      
+      req.on('error', (e) => {
+        resolve({ success: false, error: e.message });
+      });
+      
+      req.on('timeout', () => {
+        req.destroy();
+        resolve({ success: false, error: 'Connection timeout' });
+      });
+      
+      req.write(xmlPayload);
+      req.end();
+    } catch (e) {
+      resolve({ success: false, error: e.message });
+    }
+  });
+}
+
+// DMM API認証確認関数
+async function validateDMMCredentials(apiKey, affiliateId) {
+  try {
+    const axios = require('axios');
+    const response = await axios.get('https://api.dmm.com/affiliate/v3/ItemList', {
+      params: {
+        api_id: apiKey,
+        affiliate_id: affiliateId,
+        site: 'FANZA',
+        service: 'digital',
+        floor: 'videoa',
+        hits: 1,
+        output: 'json'
+      },
+      timeout: 5000
+    });
+    
+    return response.status === 200;
+  } catch (error) {
+    console.error('DMM validation error:', error.message);
+    return false;
+  }
+}
+
+// サイト情報更新API
+exports.updateWordPressSite = functions
+  .region('asia-northeast1')
+  .https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    
+    if (req.method !== 'PUT' && req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method not allowed' });
+    }
+    
+    try {
+      const { siteId } = req.query;
+      const updates = req.body;
+      
+      if (!siteId) {
+        return res.status(400).json({ error: 'サイトIDが必要です' });
+      }
+      // 更新日時を追加
+      updates.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+      
+      await admin.firestore()
+        .collection('wordpress_sites')
+        .doc(siteId)
+        .update(updates);
+      
+      return res.json({
+        success: true,
+        message: 'サイト情報を更新しました'
+      });
+      
+    } catch (error) {
+      console.error('Update error:', error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+// サイト削除API（無効化）
+exports.disableWordPressSite = functions
+  .region('asia-northeast1')
+  .https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    
+    try {
+      const { siteId } = req.query;
+      
+      if (!siteId) {
+        return res.status(400).json({ error: 'サイトIDが必要です' });
+      }
+      
+      await admin.firestore()
+        .collection('wordpress_sites')
+        .doc(siteId)
+        .update({
+          enabled: false,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      
+      return res.json({
+        success: true,
+        message: 'サイトを無効化しました'
+      });
+      
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+// ========================================
+// マルチサイト対応商品記事生成機能
+// ========================================
+
+// マルチサイト対応商品記事生成
+exports.generateProductReviewMultiSite = functions
+  .region('asia-northeast1')
+  .runWith({ timeoutSeconds: 540, memory: '2GB' })
+  .https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    
+    try {
+      const {
+        targetSiteId,  // 投稿先サイトID
+        products = [],
+        keyword = 'レビュー',
+        autoPost = true
+      } = req.body;
+      
+      // サイト情報を取得
+      let siteConfig = null;
+      if (targetSiteId) {
+        const siteDoc = await admin.firestore()
+          .collection('wordpress_sites')
+          .doc(targetSiteId)
+          .get();
+        
+        if (!siteDoc.exists) {
+          return res.status(404).json({
+            success: false,
+            error: 'サイトが見つかりません'
+          });
+        }
+        
+        siteConfig = {
+          id: siteDoc.id,
+          ...siteDoc.data()
+        };
+        
+        // DMM API設定の確認
+        if (!siteConfig.dmmApiKey || !siteConfig.dmmAffiliateId) {
+          return res.status(400).json({
+            success: false,
+            error: 'このサイトはDMM API設定がありません'
+          });
+        }
+      }
+      
+      // BlogToolをサイト設定で初期化
+      const BlogTool = require('./lib/blog-tool');
+      const blogTool = new BlogTool(siteConfig);
+      
+      console.log(`📝 Generating product review for site: ${siteConfig?.name || 'default'}`);
+      
+      // 記事生成
+      const article = await blogTool.generateProductReview(
+        products,
+        keyword,
+        { autoPost }
+      );
+      
+      // 記事投稿
+      let postResult = { success: false };
+      if (autoPost) {
+        postResult = await blogTool.postToWordPress(article);
+        
+        // 投稿履歴を保存
+        if (postResult.success) {
+          await admin.firestore()
+            .collection('generatedArticles')
+            .add({
+              title: article.title,
+              postId: postResult.postId,
+              postUrl: postResult.url,
+              targetSite: targetSiteId,
+              siteName: siteConfig?.name,
+              category: 'products',
+              keyword: keyword,
+              productCount: products.length,
+              createdAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+        }
+      }
+      
+      res.json({
+        success: true,
+        site: siteConfig?.name || 'default',
+        title: article.title,
+        postId: postResult.postId || null,
+        postUrl: postResult.url || null,
+        message: postResult.success ? 
+          `「${siteConfig?.name}」に投稿されました` : 
+          'ドラフトとして保存されました'
+      });
+      
+    } catch (error) {
+      console.error('Error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+// DMM API対応サイトのみ取得
+exports.getDMMEnabledSites = functions
+  .region('asia-northeast1')
+  .https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    
+    try {
+      const snapshot = await admin.firestore()
+        .collection('wordpress_sites')
+        .where('enabled', '==', true)
+        .get();
+      
+      const sites = snapshot.docs
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+        .filter(site => site.dmmApiKey && site.dmmAffiliateId);
+      
+      res.json({
+        success: true,
+        total: sites.length,
+        sites: sites.map(s => ({
+          id: s.id,
+          name: s.name,
+          url: s.url,
+          hasDMM: true
+        }))
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+// ===== マルチサイト対応商品検索API =====
+exports.searchProductsMultiSite = functions
+  .region('asia-northeast1')
+  .runWith({ timeoutSeconds: 60 })
+  .https.onRequest(async (req, res) => {
+    const cors = require('cors')({
+      origin: true,
+      credentials: true
+    });
+    
+    cors(req, res, async () => {
+      try {
+        const { keyword, siteId, limit = 20, page = 1 } = req.body || req.query;
+        
+        if (!keyword || !siteId) {
+          return res.status(400).json({
+            success: false,
+            error: 'Keyword and siteId are required'
+          });
+        }
+        
+        // サイト情報を取得
+        const siteDoc = await admin.firestore()
+          .collection('wordpress_sites')
+          .doc(siteId)
+          .get();
+        
+        if (!siteDoc.exists) {
+          return res.status(404).json({
+            success: false,
+            error: 'Site not found'
+          });
+        }
+        
+        const siteData = siteDoc.data();
+        
+        // DMM API設定の確認
+        if (!siteData.dmmApiKey || !siteData.dmmAffiliateId) {
+          return res.status(400).json({
+            success: false,
+            error: 'DMM API not configured for this site'
+          });
+        }
+        
+        console.log(`Product search for ${siteData.name}: ${keyword}`);
+        
+        const axios = require('axios');
+        const dmmParams = {
+          api_id: siteData.dmmApiKey,
+          affiliate_id: siteData.dmmAffiliateId,
+          site: 'FANZA',
+          service: 'digital',
+          floor: 'videoa',
+          keyword: keyword,
+          hits: parseInt(limit),
+          offset: (parseInt(page) - 1) * parseInt(limit) + 1,
+          sort: '-rank',
+          output: 'json'
+        };
+        
+        const dmmResponse = await axios.get('https://api.dmm.com/affiliate/v3/ItemList', {
+          params: dmmParams,
+          timeout: 10000
+        });
+        
+        let products = [];
+        let totalCount = 0;
+        
+        if (dmmResponse.data?.result) {
+          totalCount = dmmResponse.data.result.total_count || 0;
+          const items = dmmResponse.data.result.items || [];
+          
+          products = items.map(item => ({
+            contentId: item.content_id,
+            title: item.title,
+            price: item.prices?.price || '価格不明',
+            imageUrl: item.imageURL?.large || item.imageURL?.small,
+            sampleImageUrl: item.sampleImageURL?.[0]?.l || '',
+            sampleMovieUrl: item.sampleMovieURL?.size_720_480 || '',
+            affiliateUrl: item.affiliateURL,
+            category: item.category_name || '',
+            rating: item.review?.average || 0,
+            description: item.comment || '',
+            actress: item.iteminfo?.actress?.[0]?.name || '',
+            maker: item.iteminfo?.maker?.[0]?.name || '',
+            genre: item.iteminfo?.genre?.map(g => g.name).join(', ') || ''
+          }));
+        }
+        
+        res.json({
+          success: true,
+          siteName: siteData.name,
+          keyword: keyword,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          totalCount: totalCount,
+          products: products
+        });
+        
+      } catch (error) {
+        console.error('Search error:', error);
+        res.status(500).json({
+          success: false,
+          error: error.message
+        });
+      }
+    });
+  });
+
+// サイト設定更新API
+exports.updateSiteConfig = functions
+  .region('asia-northeast1')
+  .https.onRequest(async (req, res) => {
+    // CORS設定
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    
+    // OPTIONSリクエストへの対応
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    
+    try {
+      const { siteId, name, url, dmmApiKey, dmmAffiliateId, enabled } = req.body;
+      
+      if (!siteId) {
+        return res.status(400).json({
+          success: false,
+          error: 'サイトIDが必要です'
+        });
+      }
+      
+      // 更新するフィールドを準備
+      const updateData = {
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+      
+      if (name !== undefined) updateData.name = name;
+      if (url !== undefined) updateData.url = url;
+      if (dmmApiKey !== undefined && dmmApiKey !== '') updateData.dmmApiKey = dmmApiKey;
+      if (dmmAffiliateId !== undefined && dmmAffiliateId !== '') updateData.dmmAffiliateId = dmmAffiliateId;
+      if (enabled !== undefined) updateData.enabled = enabled;
+      
+      console.log(`Updating site ${siteId} with:`, updateData);
+      
+      // Firestoreを更新
+      await admin.firestore()
+        .collection('wordpress_sites')
+        .doc(siteId)
+        .update(updateData);
+      
+      res.json({
+        success: true,
+        message: 'サイト設定を更新しました',
+        siteId: siteId
+      });
+      
+    } catch (error) {
+      console.error('Update error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });

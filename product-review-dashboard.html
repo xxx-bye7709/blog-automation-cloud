@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>商品レビュー記事生成ダッシュボード</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .dashboard { max-width: 1400px; margin: 0 auto; }
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        h1 { color: #333; margin-bottom: 10px; }
+        .subtitle { color: #666; }
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 30px;
+        }
+        .panel {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .panel h2 {
+            color: #555;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        .form-group { margin-bottom: 20px; }
+        label {
+            display: block;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 8px;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        textarea { min-height: 100px; resize: vertical; }
+        button {
+            background: linear-gradient(45deg, #667eea 30%, #764ba2 90%);
+            color: white;
+            padding: 14px 28px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        button:hover { transform: translateY(-2px); box-shadow: 0 7px 14px rgba(0,0,0,0.1); }
+        button:disabled { background: #ccc; transform: none; cursor: not-allowed; }
+        .site-selector { display: grid; gap: 10px; }
+        .site-option {
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .site-option:hover { border-color: #667eea; background: #f8f9ff; }
+        .site-option.selected { border-color: #667eea; background: #f0f4ff; }
+        .site-option.disabled { opacity: 0.5; cursor: not-allowed; }
+        .site-name { font-weight: 600; color: #333; }
+        .site-url { color: #666; font-size: 0.9em; margin-top: 5px; }
+        .dmm-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            background: #4CAF50;
+            color: white;
+            border-radius: 4px;
+            font-size: 0.8em;
+            margin-left: 10px;
+        }
+        .result { margin-top: 20px; padding: 15px; border-radius: 8px; display: none; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .loading { background: #cfe2ff; color: #084298; border: 1px solid #b6d4fe; }
+        .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 20px; }
+        .stat-box { background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center; }
+        .stat-number { font-size: 24px; font-weight: bold; color: #667eea; }
+        .stat-label { color: #666; font-size: 0.9em; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="header">
+            <h1>🚀 商品レビュー記事生成ダッシュボード</h1>
+            <p class="subtitle">DMM API連携済みサイトへの商品記事自動生成</p>
+        </div>
+        
+        <div class="main-grid">
+            <div class="panel">
+                <h2>📋 投稿先サイト選択</h2>
+                <div id="siteSelector" class="site-selector">
+                    <div class="loading">サイト一覧を読み込み中...</div>
+                </div>
+                <div class="stats">
+                    <div class="stat-box">
+                        <div class="stat-number" id="totalSites">0</div>
+                        <div class="stat-label">登録サイト</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-number" id="dmmSites">0</div>
+                        <div class="stat-label">DMM対応</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-number" id="totalPosts">0</div>
+                        <div class="stat-label">投稿記事数</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h2>🛍️ 商品情報入力</h2>
+                <form id="productForm">
+                    <div class="form-group">
+                        <label>選択中のサイト</label>
+                        <input type="text" id="selectedSiteName" readonly placeholder="左側からサイトを選択してください">
+                        <input type="hidden" id="selectedSiteId">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>キーワード</label>
+                        <input type="text" id="keyword" required placeholder="例：アニメ DVD" value="レビュー">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>商品情報（JSON形式）</label>
+                        <textarea id="productJson" required>{
+  "title": "サンプル商品",
+  "price": "2,980円",
+  "description": "商品の説明文",
+  "affiliateUrl": "https://www.dmm.com/...",
+  "imageUrl": "https://pics.dmm.com/...",
+  "rating": 4.5
+}</textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="autoPost" checked>
+                            自動投稿する
+                        </label>
+                    </div>
+                    
+                    <button type="submit" id="generateBtn" disabled>
+                        📝 記事を生成して投稿
+                    </button>
+                    
+                    <div id="result" class="result"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = 'https://asia-northeast1-blog-automation-system.cloudfunctions.net';
+        let selectedSiteId = null;
+        
+        async function loadSites() {
+            try {
+                const allSitesRes = await fetch(`${API_BASE}/getWordPressSites`);
+                const allSites = await allSitesRes.json();
+                
+                const dmmSitesRes = await fetch(`${API_BASE}/getDMMEnabledSites`);
+                const dmmSites = await dmmSitesRes.json();
+                
+                const selectorDiv = document.getElementById('siteSelector');
+                selectorDiv.innerHTML = '';
+                
+                document.getElementById('totalSites').textContent = allSites.total || 0;
+                document.getElementById('dmmSites').textContent = dmmSites.total || 0;
+                
+                allSites.sites.forEach(site => {
+                    const hasDMM = dmmSites.sites.some(d => d.id === site.id);
+                    const siteDiv = document.createElement('div');
+                    siteDiv.className = `site-option ${!hasDMM ? 'disabled' : ''}`;
+                    siteDiv.innerHTML = `
+                        <div class="site-name">
+                            ${site.name}
+                            ${hasDMM ? '<span class="dmm-badge">DMM対応</span>' : ''}
+                        </div>
+                        <div class="site-url">${site.url}</div>
+                    `;
+                    
+                    if (hasDMM) {
+                        siteDiv.onclick = () => selectSite(site);
+                    }
+                    
+                    selectorDiv.appendChild(siteDiv);
+                });
+                
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('siteSelector').innerHTML = 
+                    '<div class="error">エラー: サイト一覧の読み込みに失敗しました</div>';
+            }
+        }
+        
+        function selectSite(site) {
+            document.querySelectorAll('.site-option').forEach(el => {
+                el.classList.remove('selected');
+            });
+            event.currentTarget.classList.add('selected');
+            
+            selectedSiteId = site.id;
+            document.getElementById('selectedSiteId').value = site.id;
+            document.getElementById('selectedSiteName').value = site.name;
+            document.getElementById('generateBtn').disabled = false;
+        }
+        
+        document.getElementById('productForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (!selectedSiteId) {
+                alert('投稿先サイトを選択してください');
+                return;
+            }
+            
+            const resultDiv = document.getElementById('result');
+            const generateBtn = document.getElementById('generateBtn');
+            
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'result loading';
+            resultDiv.innerHTML = '記事を生成中... しばらくお待ちください（30秒〜1分程度）';
+            generateBtn.disabled = true;
+            
+            try {
+                let products;
+                try {
+                    const productData = JSON.parse(document.getElementById('productJson').value);
+                    products = Array.isArray(productData) ? productData : [productData];
+                } catch (e) {
+                    throw new Error('商品情報のJSON形式が正しくありません');
+                }
+                
+                const data = {
+                    targetSiteId: selectedSiteId,
+                    products: products,
+                    keyword: document.getElementById('keyword').value,
+                    autoPost: document.getElementById('autoPost').checked
+                };
+                
+                const response = await fetch(`${API_BASE}/generateProductReviewMultiSite`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <h3>✅ 成功</h3>
+                        <p>${result.message}</p>
+                        <p>タイトル: ${result.title}</p>
+                        ${result.postUrl ? `<p>URL: <a href="${result.postUrl}" target="_blank">${result.postUrl}</a></p>` : ''}
+                    `;
+                    
+                    const currentPosts = parseInt(document.getElementById('totalPosts').textContent);
+                    document.getElementById('totalPosts').textContent = currentPosts + 1;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = `<h3>❌ エラー</h3><p>${result.error}</p>`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `<h3>❌ エラー</h3><p>${error.message}</p>`;
+            } finally {
+                generateBtn.disabled = false;
+            }
+        });
+        
+        window.addEventListener('load', loadSites);
+    </script>
+</body>
+</html>
