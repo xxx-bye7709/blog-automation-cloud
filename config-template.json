@@ -1,0 +1,51 @@
+{
+  "license": {
+    "key": "YOUR_LICENSE_KEY_HERE",
+    "email": "your-email@example.com"
+  },
+  
+  "firebase": {
+    "projectId": "your-project-id",
+    "region": "asia-northeast1"
+  },
+  
+  "wordpress": {
+    "sites": [
+      {
+        "id": "site_001",
+        "name": "メインサイト",
+        "url": "https://your-wordpress-site.com",
+        "username": "your-username",
+        "password": "your-application-password",
+        "enabled": true,
+        "isDefault": true,
+        "categories": {
+          "entertainment": 1,
+          "anime": 2,
+          "game": 3,
+          "default": 1
+        }
+      }
+    ]
+  },
+  
+  "api_keys": {
+    "openai": {
+      "key": "sk-YOUR_OPENAI_API_KEY",
+      "model": "gpt-4o-mini"
+    },
+    "dmm": {
+      "api_id": "YOUR_DMM_API_ID",
+      "affiliate_id": "YOUR_AFFILIATE_ID",
+      "enabled": false
+    }
+  },
+  
+  "settings": {
+    "maxArticlesPerDay": 10,
+    "autoSchedule": false,
+    "defaultCategory": "entertainment",
+    "generateImage": true,
+    "debugMode": false
+  }
+}
